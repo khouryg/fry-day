@@ -49,3 +49,18 @@ Build 2 upload and processing completed. App Store Connect shows 1.0.0 (2) as Te
 Restored upstream's 40-point title, 72-point UV number, 20-point card gaps and outer/card padding, and 15-point picker padding. Removed the added footer rows and moved their secondary information into How It Works. Kept Fry Day branding, corrected session behavior, estimate wording, and automatic Live Activities without notifications. Like upstream, the original-size layout can overflow on smaller screens instead of shrinking its cards; scrolling does not bounce when the content fits.
 
 Validation: simulator build succeeded; iPhone 17 Pro visual check confirms all original-size cards fit on one page, and the existing How It Works sheet opens with forecast information and source links. No session or weather-service code changed. The restoration is packaged as 1.0.0 (3). All 34 iOS tests passed again, the signed archive succeeded, and app/widget versions, App Group entitlements, icon, and privacy manifests were checked. Apple accepted the upload and completed processing. Build 1.0.0 (3) is verified as Testing in Fry Day Internal, with the existing owner tester. Build ID: `7c96f4ae-3e59-4a4a-8fbf-4d12af2bdc38`.
+
+## Build 4 — September 20, 2026
+
+- 39 iOS simulator tests passed, including rising/falling UV, elapsed-dose preservation, forecast bounds, and ended sessions.
+- Signed generic-iOS Release archive succeeded at `/private/tmp/FryDay-1.0.0-4.xcarchive`. App and widget are both 1.0.0 (4), with the expected bundle identifiers, privacy manifests, and App Group.
+- App Store Connect upload succeeded; build ID `9a88bb88-215b-4b5d-a0cb-832a44dc093e`.
+- Physical-device notification delivery and lifecycle checks remain beta validation work. No App Review submission was made.
+
+## Optional dietary Vitamin D export — pending release
+
+43 simulator tests passed, including Health sample unit conversion, corrected time intervals, stable retry identities, distinct-session identities, and omission of zero/active sessions. Verified the simulator displays Apple’s native Vitamin D write permission request with the new purpose string. Real Health persistence, duplicate suppression, denial/revocation, and device export checks remain before the next release. No Health records were written during screenshot capture.
+
+## Build 5 release verification — September 20, 2026
+
+Signed Release archive `/private/tmp/FryDay-1.0.0-5.xcarchive` and upload succeeded. Both targets are 1.0.0 (5); identifiers, App Group, privacy manifests, icon, and Health entitlement verified. App Store Connect processed the build and Fry Day Internal shows Testing with one owner tester. No public review submission was made.

@@ -6,7 +6,7 @@ options:
 settings:
   base:
     MARKETING_VERSION: 1.0.0
-    CURRENT_PROJECT_VERSION: 3
+    CURRENT_PROJECT_VERSION: 5
     SWIFT_VERSION: "5.0"
     TARGETED_DEVICE_FAMILY: "1"
     SUPPORTS_MACCATALYST: false
@@ -36,7 +36,7 @@ targets:
         UIRequiresFullScreen: true
         NSLocationWhenInUseUsageDescription: Fry Day uses your location to request the local UV forecast from Open-Meteo.
         NSHealthShareUsageDescription: Optionally read your age and skin type to personalize exposure estimates on this device.
-        NSHealthUpdateUsageDescription: Fry Day does not write Health data. Optional Health access only reads your profile to personalize estimates.
+        NSHealthUpdateUsageDescription: With your permission, Fry Day saves estimated vitamin D from sun exposure in Health’s dietary Vitamin D category, alongside food and supplement intake.
         NSSupportsLiveActivities: true
         ITSAppUsesNonExemptEncryption: false
         CFBundleURLTypes:

@@ -15,7 +15,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 struct FryDayApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var location = LocationManager()
-    @StateObject private var health = HealthManager()
+    @StateObject private var health = HealthManager.shared
     @StateObject private var weather = UVService()
     @StateObject private var sessions = VitaminDCalculator()
 

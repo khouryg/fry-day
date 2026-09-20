@@ -25,9 +25,9 @@ Forecasts describe ambient conditions, not personal exposure. Shade, glass, orie
 
 ## Live Activities and Health
 
-Live Activities start automatically with a session and do not keep app code running continuously. Persisted timestamps let elapsed timers render while the app is suspended. The app does not schedule notifications or calculate a safe-exposure countdown.
+Live Activities start automatically with a session and do not keep app code running continuously. Persisted timestamps let elapsed timers render while the app is suspended. With notification permission, the app schedules a best-effort exposure warning using the inherited skin-type MED estimate at a threshold of 1. It integrates changing forecast UV and preserves earlier exposure when a new forecast arrives. This is not a validated burn threshold or a safe-exposure countdown. Sunscreen does not extend the warning time; unreported prior exposure and individual sensitivity are not accounted for. Missing forecast coverage produces a check-exposure notice. iOS suspension can prevent timely forecast recalculation, and notification settings can delay or silence delivery. Use sun protection independently of the alert.
 
-Modeled estimates are stored only in Fry Day. They are not exported to Health's dietary vitamin D field, which measures consumption. Optional Health access reads age and skin type only.
+Modeled estimates remain saved locally. With separate opt-in and write permission, Fry Day also exports completed session estimates to Health’s dietary Vitamin D category, converting IU to micrograms (1 IU = 0.025 micrograms). This category measures consumption, so Health may combine sun-derived estimates with food and supplements. Metadata identifies the source as an unvalidated sun-exposure estimate; this does not create a separate Health category. Each session uses a stable HealthKit sync identifier to prevent duplicate retries. Optional profile import reads age and skin type. Deleting local sessions does not delete exported Health records.
 
 ## Provenance
 
