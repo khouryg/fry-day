@@ -41,3 +41,5 @@ Apple upload and processing completed for 1.0.0 (1). App Store Connect confirms 
 Removed the main ScrollView and redundant reminder controls. The original cards and gradients remain, with normal/compact spacing selected for available height. Forecast timestamps and the Live Activity explanation are available in How It Works. Removed all notification scheduling and permission requests; launch cancels legacy notification identifiers from build 1. Persisted reminderDate fields remain for decoding existing session/activity records only.
 
 Validation: all 34 iOS tests passed. Simulator visual checks confirmed the complete home screen on iPhone 17 Pro / iOS 26.2 and iPhone SE (3rd generation) / iOS 18.5, including the denied-location and seasonal-warning state on SE. Signed Release archive succeeded with app and widget both 1.0.0 (2). Physical-device confirmation of this layout remains for the owner to perform in TestFlight.
+
+Build 2 upload and processing completed. App Store Connect shows 1.0.0 (2) as Testing in Fry Day Internal. Build ID: `9776da65-1f2e-44cd-ad47-09122c4835a9`.

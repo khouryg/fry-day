@@ -73,4 +73,6 @@ Apple app ID: `6814111734`. Approved name, subtitle, Weather / Health & Fitness 
 
 TestFlight internal group: `Fry Day Internal` (`50519082-fc5c-49df-a3dd-0bb96e09b94b`), with the owner as its only tester and automatic distribution disabled. The corrected 1.0.0 (1) upload succeeded and processing completed. Build ID: `5de4f643-2c53-4420-9454-5eb4d16aaad7`. The build is assigned to the internal group and What to Test instructions are saved. Group build status is `Testing`; owner tester status is `Invited` (September 20, 2026, 1:30 AM PDT). This does not establish physical installation or a completed device test.
 
-Build 2 removes notification scheduling and reminder controls at the owner's request, and restores a non-scrolling home screen with compact spacing on shorter devices. The copy above reflects build 2; App Store Connect text saved for build 1 must be updated before public submission.
+Build 2 removes notification scheduling and reminder controls at the owner's request, and restores a non-scrolling home screen with compact spacing on shorter devices. The description, keywords, review notes, and subtitle in App Store Connect now reflect build 2. Owner-provided review contact details were entered directly in App Store Connect, not copied into the public repository.
+
+TestFlight 1.0.0 (2) completed processing and shows Testing in Fry Day Internal. Build ID: `9776da65-1f2e-44cd-ad47-09122c4835a9`. Testing notes describe the single-page layout and automatic Live Activity without notifications.
