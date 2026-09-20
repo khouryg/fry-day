@@ -2,7 +2,8 @@
 
 ## Identity
 
-- Name: Fry Day
+- App Store name: Fry Day: Sun & UV Timer
+- Installed app name: Fry Day
 - Subtitle: UV, sun sessions & reminders
 - Primary language: English (U.S.)
 - Primary category: Weather

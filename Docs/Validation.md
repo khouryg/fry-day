@@ -29,3 +29,7 @@ Physical-device energy profiling and travel/network-transition checks remain nec
 - Final frying-pan/sun-egg icon verified as 1024 × 1024 with no alpha. The existing screen layout was preserved and a compact estimate label was added.
 - Archive: `/private/tmp/FryDay-1.0.0-1.xcarchive`; build log: `/private/tmp/fryday-archive-1.log`.
 - Direct installation on the paired iPhone reported device-locked errors, including after an unlock attempt. No physical-device functional test is claimed.
+
+## App Store upload correction — September 20, 2026
+
+Apple rejected the first upload with ITMS-90683 because the HealthKit entitlement/API reference requires `NSHealthUpdateUsageDescription`, even though authorization uses an empty write set. Added a truthful description stating that Fry Day does not write Health data. The authorization and UI are unchanged. Regenerated the project and successfully rebuilt the signed Release archive at `/private/tmp/FryDay-1.0.0-1-fixed.xcarchive`; verified the required key in the archived app. No new functional code was introduced.
