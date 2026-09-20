@@ -10,4 +10,4 @@
 
 - Approved App Store listing name: `Fry Day: Sun & UV Timer`. Keep the installed display name `Fry Day`. Apple rejected the unqualified listing name as already in use.
 
-- Keep the home screen on one page with no scrolling. No session notification/reminder controls: rely on the automatic Live Activity when a session starts. Existing information and history sheets may scroll.
+- Preserve Sun Day’s original card dimensions, typography, order, and 20-point spacing. Remove added footer rows; details belong in How It Works. Match the original overflow behavior on screens too small for the full layout instead of compressing its proportions. No session notification/reminder controls: rely on the automatic Live Activity when a session starts. Existing information and history sheets may scroll.

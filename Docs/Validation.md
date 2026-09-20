@@ -43,3 +43,9 @@ Removed the main ScrollView and redundant reminder controls. The original cards 
 Validation: all 34 iOS tests passed. Simulator visual checks confirmed the complete home screen on iPhone 17 Pro / iOS 26.2 and iPhone SE (3rd generation) / iOS 18.5, including the denied-location and seasonal-warning state on SE. Signed Release archive succeeded with app and widget both 1.0.0 (2). Physical-device confirmation of this layout remains for the owner to perform in TestFlight.
 
 Build 2 upload and processing completed. App Store Connect shows 1.0.0 (2) as Testing in Fry Day Internal. Build ID: `9776da65-1f2e-44cd-ad47-09122c4835a9`.
+
+## Original Sun Day layout restoration
+
+Restored upstream's 40-point title, 72-point UV number, 20-point card gaps and outer/card padding, and 15-point picker padding. Removed the added footer rows and moved their secondary information into How It Works. Kept Fry Day branding, corrected session behavior, estimate wording, and automatic Live Activities without notifications. Like upstream, the original-size layout can overflow on smaller screens instead of shrinking its cards; scrolling does not bounce when the content fits.
+
+Validation: simulator build succeeded; iPhone 17 Pro visual check confirms all original-size cards fit on one page, and the existing How It Works sheet opens with forecast information and source links. No session or weather-service code changed. This restoration has not yet been uploaded to TestFlight; build 2 remains the available beta.
