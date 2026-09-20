@@ -1,47 +1,40 @@
-# Sun Day
+# Fry Day
 
-UV tracking and vitamin D calculator for iOS.
+An independent, free continuation of [Sun Day](https://github.com/jackjackbits/sunday), originally released by jackjackbits and contributors under the [Unlicense](LICENSE).
 
-[📖 Read the detailed methodology](METHODOLOGY.md) | [🔒 Privacy Policy](PRIVACY.md)
+Fry Day helps you remember an outdoor sun session with a Lock Screen / Dynamic Island Live Activity and a local check-in reminder. Sessions and editable end times are saved on-device. The app also shows timestamped UV forecasts and optional modeled vitamin D estimates.
 
-<img height="500" alt="SunDay_1290x2796_v2" src="https://github.com/user-attachments/assets/b712cc98-1cc5-4e6f-8297-cabf8f801013" />
+## Build
 
-## Features
+Requires Xcode 15 or newer, iOS 17+, and XcodeGen. Development is currently verified with Xcode 26.6.
 
-- Real-time UV index from your location
-- Vitamin D calculation based on UV, skin type, and clothing
-- Moon phase display at night
-- Sunrise/sunset times
-- Saves to Apple Health
-- No API keys required
-- Small and medium widgets for your home screen
+```sh
+xcodegen generate
+open FryDay.xcodeproj
+```
 
-## Requirements
+Choose your development team in Xcode. Register `com.khouryg.fryday`, `com.khouryg.fryday.widget`, and `group.com.khouryg.fryday` with that team before device signing. Set a different identifier prefix throughout the project if you are publishing your own derivative. The configured team is the Fry Day maintainer’s team; choose your own team when building a separate derivative.
 
-- iOS 17.0+
-- iPhone only
-- Xcode 15+
+```sh
+swift test
+xcodebuild -project FryDay.xcodeproj -scheme FryDay -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
+```
 
-## Setup
+The Swift package runs deterministic exposure/persistence regression tests on macOS. The same tests also run in the iOS test target. Generated Xcode projects are ignored; `project.yml` owns settings, resources, plists, and versioning. Fry Day uses an original frying-pan/sun-egg icon. Its approved master is `Docs/Branding/fryday-icon-master.png`; `Scripts/render-icon.swift` packages it as an opaque 1024-pixel app icon. `Docs/AppIcon.svg` is an archived earlier concept.
 
-1. Clone the repo
-2. Run `xcodegen generate` to create the Xcode project
-3. Open `Sunday.xcodeproj`
-4. Select your development team
-5. Build and run
+## What changed
 
-## Usage
+- Persistent sessions survive suspension, termination, and midnight; completed history is independent of Health permissions. Incremental in-memory calculations preserve the original estimates while avoiding repeated processing of elapsed exposure.
+- Live Activity elapsed timer and End link; a scheduled check-in reminder works while the app is suspended.
+- Corrected end times recalculate the interval. UV forecast gaps are excluded instead of filled with invented values.
+- Timestamped weather requests, bounded cache, explicit offline state, and no moon-service dependency. Fresh forecasts are reused across launches; automatic requests run about every five minutes during an active session or ten minutes while idle, with exponential failure backoff and connectivity recovery.
+- The original widget advances UV from forecast timelines every 15 minutes; network refreshes are throttled to roughly three hours, with retry throttling and explicit forecast age.
+- No synthesized vitamin D is written into Health's dietary intake category. Optional Health access reads age and skin type only.
+- Original simple UI and time-of-day gradients retained, with Fry Day branding, a compact reminder control, and accurate save/estimate wording.
+- Bundled icon/launch resources, privacy manifests, and privacy/support links.
 
-1. Allow location and health permissions
-2. Press the sun button to start tracking
-3. Select your clothing level and skin type
-4. The app calculates vitamin D intake automatically
+## Estimates and privacy
 
-## APIs Used
+The inherited exposure formula is **not clinically validated** and does not measure vitamin D production or a safe exposure duration. See [methodology](METHODOLOGY.md). Session reminders are user-selected check-ins, not burn predictions.
 
-- Open-Meteo for UV data (free, no key)
-- Farmsense for moon phases (free, no key)
-
-## License
-
-Public domain. Use however you want.
+See the [privacy policy](PRIVACY.md), [attributions](ATTRIBUTIONS.md), and [release checklist](Docs/ReleaseReadiness.md). No analytics, advertising, accounts, or app-operated backend is included.

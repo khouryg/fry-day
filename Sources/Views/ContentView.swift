@@ -1,240 +1,134 @@
 import SwiftUI
 import CoreLocation
-import UIKit
-import SwiftData
-import WidgetKit
-import Combine
-import UserNotifications
 
 struct ContentView: View {
     @EnvironmentObject var locationManager: LocationManager
     @EnvironmentObject var uvService: UVService
     @EnvironmentObject var vitaminDCalculator: VitaminDCalculator
-    @EnvironmentObject var healthManager: HealthManager
-    @EnvironmentObject var networkMonitor: NetworkMonitor
-    @Environment(\.modelContext) private var modelContext
+    @StateObject private var networkMonitor = NetworkMonitor()
     @Environment(\.scenePhase) private var scenePhase
-    
     @State private var showClothingPicker = false
     @State private var showSunscreenPicker = false
     @State private var showSkinTypePicker = false
-    @State private var todaysTotal: Double = 0
-    @State private var currentGradientColors: [Color] = []
     @State private var showInfoSheet = false
     @State private var showManualExposureSheet = false
-    @State private var showSessionCompletionSheet = false
-    @State private var pendingSessionStartTime: Date?
-    @State private var pendingSessionAmount: Double = 0
-    @State private var lastUVUpdate: Date = UserDefaults.standard.object(forKey: "lastUVUpdate") as? Date ?? Date()
-    @State private var timerCancellable: AnyCancellable?
-    
-    private let timer = Timer.publish(every: 60, on: .main, in: .common)
-    
+    private let timer = Timer.publish(every: 60, tolerance: 5, on: .main, in: .common).autoconnect()
+    private var displayedUV: Double { uvService.currentUV ?? 0 }
+
     var body: some View {
         ZStack {
-            backgroundGradient
-            
-            GeometryReader { geometry in
-                if uvService.hasNoData {
-                    // No data available view
-                    VStack(spacing: 20) {
-                        Image(systemName: "wifi.slash")
-                            .font(.system(size: 60))
-                            .foregroundColor(.white.opacity(0.6))
-                        
-                        Text("No Data Available")
-                            .font(.system(size: 24, weight: .semibold))
-                            .foregroundColor(.white)
-                        
-                        if locationManager.authorizationStatus == .denied || locationManager.authorizationStatus == .restricted {
-                            Text("Location access is required to get UV data")
-                                .font(.system(size: 16))
-                                .foregroundColor(.white.opacity(0.8))
-                                .multilineTextAlignment(.center)
-                            
-                            Button(action: {
-                                locationManager.openSettings()
-                            }) {
-                                Text("Open Settings")
-                                    .font(.system(size: 16, weight: .medium))
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 30)
-                                    .padding(.vertical, 12)
-                                    .background(Color.white.opacity(0.2))
-                                    .cornerRadius(25)
-                            }
-                        } else {
-                            Text("Connect to the internet to fetch UV data")
-                                .font(.system(size: 16))
-                                .foregroundColor(.white.opacity(0.8))
-                                .multilineTextAlignment(.center)
-                            
-                            if locationManager.location != nil {
-                                Button(action: {
-                                    if let location = locationManager.location {
-                                        uvService.fetchUVData(for: location)
-                                    }
-                                }) {
-                                    Text("Retry")
-                                        .font(.system(size: 16, weight: .medium))
-                                        .foregroundColor(.white)
-                                        .padding(.horizontal, 30)
-                                        .padding(.vertical, 12)
-                                        .background(Color.white.opacity(0.2))
-                                        .cornerRadius(25)
-                                }
-                            }
-                        }
+            LinearGradient(colors: gradientColors, startPoint: .topLeading, endPoint: .bottomTrailing).ignoresSafeArea()
+            ScrollView {
+                VStack(spacing: 20) {
+                    headerSection
+                    uvSection
+                    vitaminDSection
+                    exposureToggle
+                    HStack(spacing: 12) { clothingSection; sunscreenSection }
+                    skinTypeSection
+                    reminderRow
+                    if let status = vitaminDCalculator.reminderStatus ?? vitaminDCalculator.liveActivityStatus {
+                        Text(status).font(.caption).foregroundColor(.white.opacity(0.8)).multilineTextAlignment(.center)
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    ScrollView {
-                        VStack(spacing: 20) {
-                            headerSection
-                            uvSection
-                            vitaminDSection
-                            exposureToggle
-                            HStack(spacing: 12) {
-                                clothingSection
-                                sunscreenSection
-                            }
-                            skinTypeSection
-                        }
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 20)
-                        .padding(.bottom, uvService.isOfflineMode ? 40 : 0)
-                    .animation(.easeInOut(duration: 0.3), value: uvService.isOfflineMode)
-                        .frame(maxWidth: .infinity, minHeight: geometry.size.height)
-                        .frame(width: geometry.size.width)
+                    if vitaminDCalculator.hasIncompleteCoverage {
+                        Text("Missing UV intervals are excluded from this estimate.").font(.caption).foregroundColor(.white.opacity(0.8))
                     }
-                    .scrollDisabled(contentFitsInScreen(geometry: geometry))
-                }
-            }
-            
-            // Offline mode indicator as thin bar at bottom
-            if uvService.isOfflineMode && !uvService.hasNoData {
-                VStack {
-                    Spacer()
-                    HStack(spacing: 7) {
-                        Image(systemName: "wifi.slash")
-                            .font(.system(size: 14))
-                        if let lastUpdate = uvService.lastSuccessfulUpdate {
-                            Text("Offline • Using cached data from \(timeAgo(from: lastUpdate))")
-                        } else {
-                            Text("Offline • No cached data")
-                        }
+                    Text("Vitamin D values are estimates.").font(.caption2).foregroundColor(.white.opacity(0.7))
+                    if let updated = uvService.lastSuccessfulUpdate {
+                        Text("\(uvService.isOfflineMode ? "Cached forecast" : "Forecast") · \(updated.formatted(date: .omitted, time: .shortened))")
+                            .font(.caption2).foregroundColor(.white.opacity(0.7))
                     }
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 6)
-                    .padding(.bottom, 20)
-                    .background(Color.orange.opacity(0.9))
-                }
-                .ignoresSafeArea(edges: .bottom)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-        }
-        .animation(.easeInOut(duration: 0.3), value: uvService.isOfflineMode)
-        .onAppear {
-            setupApp()
-            // Start timer when view appears
-            timerCancellable = timer.autoconnect().sink { _ in
-                updateData()
-                loadTodaysTotal()
-                // Only update gradient if colors actually changed
-                let newColors = gradientColors
-                if newColors != currentGradientColors {
-                    currentGradientColors = newColors
-                }
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
-            // Check for updated skin type and adaptation when app returns to foreground
-            vitaminDCalculator.setHealthManager(healthManager)
-            // NetworkMonitor will automatically detect when network is restored
-        }
-        .onChange(of: scenePhase) { _, newPhase in
-            switch newPhase {
-            case .active:
-                // Resume timer when app becomes active
-                timerCancellable = timer.autoconnect().sink { _ in
-                    updateData()
-                    loadTodaysTotal()
-                    // Only update gradient if colors actually changed
-                    let newColors = gradientColors
-                    if newColors != currentGradientColors {
-                        currentGradientColors = newColors
+                    if let error = uvService.lastError {
+                        Button("Refresh UV data") { refreshWeather(force: true) }.font(.caption).tint(.white).accessibilityHint(error)
                     }
-                }
-                // Also update data immediately when returning to foreground
-                updateData()
-                loadTodaysTotal()
-                // Update gradient immediately when returning to foreground
-                let newColors = gradientColors
-                if newColors != currentGradientColors {
-                    currentGradientColors = newColors
-                }
-                // Restart location updates when app becomes active
-                locationManager.startUpdatingLocation()
-            case .inactive, .background:
-                // Cancel timer when app goes to background
-                timerCancellable?.cancel()
-                timerCancellable = nil
-            @unknown default:
-                break
+                    Link("Weather by Open-Meteo · CC BY 4.0", destination: URL(string: "https://open-meteo.com/")!)
+                        .font(.caption2).foregroundColor(.white.opacity(0.7))
+                }.padding(.horizontal, 20).padding(.vertical, 20)
             }
         }
-        .onChange(of: vitaminDCalculator.isInSun) {
-            handleSunToggle()
+        .sheet(isPresented: $showInfoSheet) { InfoSheet() }
+        .sheet(isPresented: $showManualExposureSheet) { ManualExposureSheet() }
+        .sheet(isPresented: Binding(get: { vitaminDCalculator.active?.end != nil }, set: { _ in })) {
+            if let session = vitaminDCalculator.active { SessionCompletionSheet(session: session) }
         }
-        .onChange(of: locationManager.location) { _, newLocation in
-            if let location = newLocation {
-                uvService.fetchUVData(for: location)
+        .alert("Couldn’t complete that action", isPresented: Binding(get: { vitaminDCalculator.errorMessage != nil }, set: { if !$0 { vitaminDCalculator.errorMessage = nil } })) {
+            Button("OK") { vitaminDCalculator.errorMessage = nil }
+            Button("Reload saved sessions") { vitaminDCalculator.reload() }
+        } message: { Text(vitaminDCalculator.errorMessage ?? "") }
+        .task { locationManager.requestPermission(); refreshWeather() }
+        .onChange(of: locationManager.location) { _, _ in refreshWeather() }
+        .onChange(of: uvService.snapshot?.updatedAt) { _, _ in
+            vitaminDCalculator.updateForecast(uvService.samples, updatedAt: uvService.lastSuccessfulUpdate)
+        }
+        .onChange(of: networkMonitor.isConnected) { _, connected in
+            if connected {
+                uvService.networkBecameAvailable()
+                if scenePhase == .active { refreshWeather() }
             }
         }
-        .onChange(of: vitaminDCalculator.clothingLevel) {
-            // Update rate when clothing changes
-            vitaminDCalculator.updateUV(uvService.currentUV)
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { locationManager.requestPermission(); refreshWeather() }
+            else { locationManager.stopUpdatingLocation() }
         }
-        .onChange(of: vitaminDCalculator.sunscreenLevel) {
-            // Update rate when sunscreen changes
-            vitaminDCalculator.updateUV(uvService.currentUV)
-        }
-        .onChange(of: vitaminDCalculator.skinType) {
-            // Update rate when skin type changes
-            vitaminDCalculator.updateUV(uvService.currentUV)
-        }
-        .onChange(of: uvService.currentUV) { _, newUV in
-            // Update rate when UV changes
-            vitaminDCalculator.updateUV(newUV)
+        .onReceive(timer) { _ in
+            if scenePhase == .active { refreshWeather() }
         }
         .onOpenURL { url in
-            handleURL(url)
+            guard url.scheme == "fryday", url.host == "end",
+                  let value = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "session" })?.value,
+                  let id = UUID(uuidString: value) else { return }
+            vitaminDCalculator.prepareCompletion(sessionID: id)
         }
-        .alert("Location Access Required", isPresented: $locationManager.showLocationDeniedAlert) {
-            Button("Cancel", role: .cancel) { }
-            Button("Open Settings") {
-                locationManager.openSettings()
+    }
+
+    private func profileBinding<T>(_ key: WritableKeyPath<ExposureSettings, T>) -> Binding<T> {
+        Binding(get: { vitaminDCalculator.settings[keyPath: key] }, set: {
+            var settings = vitaminDCalculator.settings; settings[keyPath: key] = $0; vitaminDCalculator.updateSettings(settings)
+        })
+    }
+    private func refreshWeather(force: Bool = false) {
+        if let location = locationManager.location { uvService.fetchUVData(for: location, force: force, isTracking: vitaminDCalculator.isInSun) }
+    }
+    private var reminderRow: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "bell")
+            if let session = vitaminDCalculator.active {
+                Text(session.reminderDate > vitaminDCalculator.now ? "Check in at \(session.reminderDate.formatted(date: .omitted, time: .shortened))" : "Time to check in. Still outdoors?")
+            } else {
+                Menu {
+                    Picker("Remind me after", selection: $vitaminDCalculator.reminderMinutes) {
+                        ForEach([10, 20, 30, 60], id: \.self) { Text("\($0) minutes").tag($0) }
+                    }
+                } label: { Text("Remind me after \(vitaminDCalculator.reminderMinutes) min"); Image(systemName: "chevron.down") }
             }
-        } message: {
-            Text(locationManager.locationDeniedMessage)
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in
-            // Reset the alert flag when app becomes active (user may have changed settings)
-            locationManager.resetLocationDeniedAlert()
+        }.font(.caption).foregroundColor(.white.opacity(0.8))
+    }
+    private var exposureToggle: some View {
+        HStack(spacing: 12) {
+            Button {
+                if vitaminDCalculator.isInSun { vitaminDCalculator.prepareCompletion() }
+                else { vitaminDCalculator.startSession() }
+            } label: {
+                HStack {
+                    Image(systemName: vitaminDCalculator.isInSun ? "sun.max.fill" : displayedUV == 0 ? moonPhaseIcon() : "sun.max")
+                        .font(.system(size: 24)).symbolEffect(.pulse, isActive: vitaminDCalculator.isInSun)
+                    Text(vitaminDCalculator.isInSun ? "End" : displayedUV == 0 ? "No UV available" : "Begin")
+                        .font(.system(size: 18, weight: .semibold))
+                }.foregroundColor(.white).frame(maxWidth: .infinity).padding(.vertical, 20)
+                    .background(vitaminDCalculator.isInSun ? Color.yellow.opacity(0.3) : Color.black.opacity(0.2)).cornerRadius(15)
+            }
+            .disabled(displayedUV == 0 && !vitaminDCalculator.isInSun)
+            .opacity(displayedUV == 0 && !vitaminDCalculator.isInSun ? 0.6 : 1)
+            Button { showManualExposureSheet = true } label: {
+                Image(systemName: "clock.arrow.circlepath").font(.system(size: 24)).foregroundColor(.white)
+                    .frame(width: 60).padding(.vertical, 20).background(Color.black.opacity(0.2)).cornerRadius(15)
+            }.accessibilityLabel("Log past exposure").disabled(vitaminDCalculator.active != nil).opacity(vitaminDCalculator.active != nil ? 0.4 : 1)
         }
     }
-    
-    private var backgroundGradient: some View {
-        LinearGradient(
-            colors: currentGradientColors.isEmpty ? [Color(hex: "4a90e2"), Color(hex: "7bb7e5")] : currentGradientColors,
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-        .ignoresSafeArea()
+    private func formatTime(_ date: Date?) -> String {
+        date?.formatted(date: .omitted, time: .shortened) ?? "--:--"
     }
-    
+    private func moonPhaseIcon() -> String { uvService.moonPhaseIcon }
     private var gradientColors: [Color] {
         let hour = Calendar.current.component(.hour, from: Date())
         let minute = Calendar.current.component(.minute, from: Date())
@@ -281,7 +175,7 @@ struct ContentView: View {
     
     private var headerSection: some View {
         Button(action: { showInfoSheet = true }) {
-            Text("SUN DAY")
+            Text("FRY DAY")
                 .font(.system(size: 40, weight: .bold, design: .rounded))
                 .foregroundColor(.white)
                 .tracking(2)
@@ -317,17 +211,17 @@ struct ContentView: View {
                     .foregroundColor(.white.opacity(0.7))
                     .tracking(1.5)
                 
-                Text(String(format: "%.1f", uvService.currentUV))
+                Text(uvService.currentUV.map { String(format: "%.1f", $0) } ?? "—")
                     .font(.system(size: 72, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
             }
             
             HStack(spacing: 15) {
                 VStack(spacing: 3) {
-                    Text("BURN LIMIT")
+                    Text("CHECK-IN")
                         .font(.system(size: 9, weight: .medium))
                         .foregroundColor(.white.opacity(0.6))
-                    Text(uvService.currentUV == 0 ? "---" : formatSafeTime(safeExposureTime))
+                    Text("\(vitaminDCalculator.reminderMinutes) min")
                         .font(.system(size: 20, weight: .bold))
                         .foregroundColor(.white)
                     Text(" ")
@@ -388,7 +282,7 @@ struct ContentView: View {
             VStack(spacing: 2) {
                 HStack(spacing: 15) {
                     HStack(spacing: 5) {
-                        Image(systemName: uvService.currentUV == 0 ? 
+                        Image(systemName: displayedUV == 0 ?
                                          (uvService.currentCloudCover < 70 ? moonPhaseIcon() : "cloud.fill") :
                                          uvService.currentCloudCover == 0 ? "sun.max" : 
                                          uvService.currentCloudCover > 50 ? "cloud.fill" : "cloud")
@@ -407,9 +301,7 @@ struct ContentView: View {
                             Text("\(Int(uvService.currentAltitude))m")
                                 .font(.system(size: 11, weight: .medium))
                                 .foregroundColor(.white.opacity(0.6))
-                            Text("(+\(Int((uvService.uvMultiplier - 1) * 100))% UV)")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundColor(.white.opacity(0.6))
+
                         }
                     }
                 }
@@ -437,10 +329,10 @@ struct ContentView: View {
                         .font(.system(size: 14))
                         .foregroundColor(.yellow)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Vitamin D Winter")
+                        Text("Seasonal UV")
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundColor(.yellow)
-                        Text("Limited UV-B at \(Int(uvService.currentLatitude))°. Consider supplements.")
+                        Text("Seasonal UV estimates can be less reliable.")
                             .font(.system(size: 11))
                             .foregroundColor(.white.opacity(0.8))
                     }
@@ -458,67 +350,6 @@ struct ContentView: View {
         .cornerRadius(20)
     }
     
-    private var exposureToggle: some View {
-        HStack(spacing: 12) {
-            // Main tracking button
-            Button(action: {
-                // Haptic feedback
-                let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
-                impactFeedback.impactOccurred()
-                
-                if vitaminDCalculator.isInSun && vitaminDCalculator.sessionVitaminD > 0 {
-                    // Ending session - show completion sheet
-                    // Store session data BEFORE toggling (which might clear it)
-                    pendingSessionStartTime = vitaminDCalculator.sessionStartTime
-                    pendingSessionAmount = vitaminDCalculator.sessionVitaminD
-                    // Don't toggle yet - let the sheet handle it
-                    showSessionCompletionSheet = true
-                } else {
-                    // Starting session - just toggle
-                    vitaminDCalculator.toggleSunExposure(uvIndex: uvService.currentUV)
-                }
-            }) {
-                HStack {
-                    Image(systemName: vitaminDCalculator.isInSun ? "sun.max.fill" : 
-                                     uvService.currentUV == 0 ? moonPhaseIcon() : "sun.max")
-                        .font(.system(size: 24))
-                        .symbolEffect(.pulse, isActive: vitaminDCalculator.isInSun)
-                    
-                    Text(vitaminDCalculator.isInSun ? "End" : 
-                         uvService.currentUV == 0 ? "No UV available" : "Begin")
-                        .font(.system(size: 18, weight: .semibold))
-                }
-                .foregroundColor(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 20)
-                .background(vitaminDCalculator.isInSun ? Color.yellow.opacity(0.3) : Color.black.opacity(0.2))
-                .cornerRadius(15)
-                .animation(.easeInOut(duration: 0.3), value: vitaminDCalculator.isInSun)
-            }
-            .disabled(uvService.currentUV == 0 && !vitaminDCalculator.isInSun)
-            .opacity(uvService.currentUV == 0 && !vitaminDCalculator.isInSun ? 0.6 : 1.0)
-            
-            // Manual entry button
-            Button(action: {
-                // Haptic feedback
-                let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-                impactFeedback.impactOccurred()
-                
-                showManualExposureSheet = true
-            }) {
-                Image(systemName: "clock.arrow.circlepath")
-                    .font(.system(size: 24))
-                    .foregroundColor(.white)
-                    .frame(width: 60)
-                    .padding(.vertical, 20)
-                    .background(Color.black.opacity(0.2))
-                    .cornerRadius(15)
-            }
-            .disabled(vitaminDCalculator.isInSun) // Can't add manual entry while tracking
-            .opacity(vitaminDCalculator.isInSun ? 0.4 : 1.0)
-        }
-    }
-    
     private var clothingSection: some View {
         Button(action: { showClothingPicker.toggle() }) {
             VStack(spacing: 10) {
@@ -528,7 +359,7 @@ struct ContentView: View {
                     .tracking(1.5)
                 
                 HStack {
-                    Text(vitaminDCalculator.clothingLevel.shortDescription)
+                    Text(vitaminDCalculator.settings.clothing.shortDescription)
                         .font(.system(size: 16, weight: .medium))
                     
                     Image(systemName: "chevron.down")
@@ -542,7 +373,7 @@ struct ContentView: View {
             .cornerRadius(15)
         }
         .sheet(isPresented: $showClothingPicker) {
-            ClothingPicker(selection: $vitaminDCalculator.clothingLevel)
+            ClothingPicker(selection: profileBinding(\.clothing))
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
         }
@@ -557,7 +388,7 @@ struct ContentView: View {
                     .tracking(1.5)
                 
                 HStack {
-                    Text(vitaminDCalculator.sunscreenLevel.description)
+                    Text(vitaminDCalculator.settings.sunscreen.description)
                         .font(.system(size: 16, weight: .medium))
                     
                     Image(systemName: "chevron.down")
@@ -571,7 +402,7 @@ struct ContentView: View {
             .cornerRadius(15)
         }
         .sheet(isPresented: $showSunscreenPicker) {
-            SunscreenPicker(selection: $vitaminDCalculator.sunscreenLevel)
+            SunscreenPicker(selection: profileBinding(\.sunscreen))
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
         }
@@ -586,13 +417,7 @@ struct ContentView: View {
                     .tracking(1.5)
                 
                 HStack {
-                    if vitaminDCalculator.skinTypeFromHealth {
-                        Image(systemName: "heart.fill")
-                            .font(.system(size: 10))
-                            .foregroundColor(.white.opacity(0.6))
-                    }
-                    
-                    Text(vitaminDCalculator.skinType.description)
+                    Text(vitaminDCalculator.settings.skin.description)
                         .font(.system(size: 16, weight: .medium))
                     
                     Image(systemName: "chevron.down")
@@ -606,54 +431,10 @@ struct ContentView: View {
             .cornerRadius(15)
         }
         .sheet(isPresented: $showSkinTypePicker) {
-            SkinTypePicker(selection: $vitaminDCalculator.skinType)
-        }
-        .sheet(isPresented: $showInfoSheet) {
-            InfoSheet()
-        }
-        .sheet(isPresented: $showManualExposureSheet) {
-            ManualExposureSheet()
-        }
-        .sheet(isPresented: $showSessionCompletionSheet) {
-            ZStack {
-                // Match the ManualExposureSheet background to avoid any white flash
-                LinearGradient(
-                    colors: [Color(hex: "4a90e2"), Color(hex: "7bb7e5")],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
-
-                if let startTime = pendingSessionStartTime {
-                    SessionCompletionSheet(
-                        sessionStartTime: startTime,
-                        sessionAmount: pendingSessionAmount,
-                        onSave: {
-                            // End the session and reset
-                            // Reset session amount first to avoid re-presenting the sheet
-                            vitaminDCalculator.sessionVitaminD = 0.0
-                            vitaminDCalculator.toggleSunExposure(uvIndex: uvService.currentUV)
-                            loadTodaysTotal()
-                        },
-                        onCancel: {
-                            // Keep tracking - session continues
-                        }
-                    )
-                    .environmentObject(vitaminDCalculator)
-                    .environmentObject(healthManager)
-                    .environment(\.modelContext, modelContext)
-                } else {
-                    // Fallback placeholder to ensure non-empty content during first frame
-                    ProgressView().tint(.white)
-                }
-            }
-            .preferredColorScheme(.dark)
-            .presentationDetents([.large])
-            .presentationDragIndicator(.visible)
-            .presentationBackground(.clear)
+            SkinTypePicker(selection: profileBinding(\.skin))
         }
     }
-    
+
     private var vitaminDSection: some View {
         VStack(spacing: 15) {
             HStack(alignment: .top, spacing: 15) {
@@ -731,14 +512,14 @@ struct ContentView: View {
                         .tracking(1.2)
                         .frame(height: 12)
                     
-                    Text(formatTodaysTotal(todaysTotal + vitaminDCalculator.sessionVitaminD))
+                    Text(formatTodaysTotal(vitaminDCalculator.todayTotal))
                         .font(.system(size: 26, weight: .bold))
                         .foregroundColor(.white)
                         .monospacedDigit()
                         .frame(minWidth: 80)
                         .frame(height: 34)
                     
-                    Text("IU total")
+                    Text("IU estimated")
                         .font(.system(size: 12))
                         .foregroundColor(.white.opacity(0.6))
                         .frame(height: 16)
@@ -750,102 +531,6 @@ struct ContentView: View {
         .frame(maxWidth: .infinity)
         .background(Color.black.opacity(0.2))
         .cornerRadius(20)
-    }
-    
-    private func formatTime(_ date: Date?) -> String {
-        guard let date = date else { return "--:--" }
-        let formatter = DateFormatter()
-        formatter.timeStyle = .short
-        formatter.dateStyle = .none
-        return formatter.string(from: date)
-    }
-    
-    private var safeExposureTime: Int {
-        uvService.burnTimeMinutes[vitaminDCalculator.skinType.rawValue] ?? 60
-    }
-    
-    private func setupApp() {
-        locationManager.requestPermission()
-        healthManager.requestAuthorization()
-        loadTodaysTotal()
-        currentGradientColors = gradientColors
-        // Request notification permissions once up front (for burn warnings and sun events)
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
-        
-        // Connect services - MUST set modelContext before any UV data fetching
-        vitaminDCalculator.setHealthManager(healthManager)
-        vitaminDCalculator.setUVService(uvService)
-        uvService.setModelContext(modelContext)
-        uvService.setNetworkMonitor(networkMonitor)
-        
-        // Fetch UV data on startup
-        if let location = locationManager.location {
-            uvService.fetchUVData(for: location)
-        }
-        
-        // Initialize vitamin D rate with current UV (even if 0)
-        vitaminDCalculator.updateUV(uvService.currentUV)
-        
-        // If session was restored, start tracking timer
-        if vitaminDCalculator.isInSun {
-            vitaminDCalculator.startSession(uvIndex: uvService.currentUV)
-        }
-        
-        // Ensure moon phase is available for widget
-        if uvService.currentMoonPhaseName.isEmpty {
-            let defaultPhase = "Waxing Gibbous"
-            uvService.currentMoonPhaseName = defaultPhase
-            UserDefaults(suiteName: "group.sunday.widget")?.set(defaultPhase, forKey: "moonPhaseName")
-            WidgetCenter.shared.reloadAllTimelines()
-        }
-    }
-    
-    private func updateData() {
-        guard let location = locationManager.location else { return }
-        
-        // Update UV data every 5 minutes if needed
-        let now = Date()
-        if now.timeIntervalSince(lastUVUpdate) >= 300 {
-            uvService.fetchUVData(for: location)
-            lastUVUpdate = now
-            UserDefaults.standard.set(now, forKey: "lastUVUpdate")
-            
-            // Stop high-frequency location updates after getting fresh data
-            // Switch to significant location changes for battery efficiency
-            locationManager.stopUpdatingLocation()
-            locationManager.startSignificantLocationChanges()
-        }
-        
-        vitaminDCalculator.updateUV(uvService.currentUV)
-    }
-    
-    private func handleSunToggle() {
-        // Only show completion sheet when turning off tracking from main UI,
-        // not while the completion sheet itself is already presented.
-        if !vitaminDCalculator.isInSun && vitaminDCalculator.sessionVitaminD > 0 && !showSessionCompletionSheet {
-            // Store session data for the completion sheet
-            pendingSessionStartTime = vitaminDCalculator.sessionStartTime
-            pendingSessionAmount = vitaminDCalculator.sessionVitaminD
-            
-            // Show the completion sheet
-            showSessionCompletionSheet = true
-        }
-    }
-    
-    private func loadTodaysTotal() {
-        healthManager.getTodaysVitaminD { total in
-            todaysTotal = total ?? 0
-        }
-    }
-    
-    private func formatVitaminD(_ value: Double) -> String {
-        if value < 1 {
-            return String(format: "%.2f IU", value)
-        } else if value < 10 {
-            return String(format: "%.1f IU", value)
-        } else {
-            return "\(Int(value)) IU"
-        }
     }
     
     private func formatVitaminDNumber(_ value: Double) -> String {
@@ -897,101 +582,6 @@ struct ContentView: View {
         }
     }
     
-    private func timeAgo(from date: Date) -> String {
-        let duration = Date().timeIntervalSince(date)
-        let minutes = Int(duration / 60)
-        let hours = Int(duration / 3600)
-        
-        if minutes < 1 {
-            return "just now"
-        } else if minutes < 60 {
-            return "\(minutes)m ago"
-        } else if hours < 24 {
-            return "\(hours)h ago"
-        } else {
-            return "\(hours / 24)d ago"
-        }
-    }
-    
-    private func handleURL(_ url: URL) {
-        guard url.scheme == "sunday" else { return }
-        
-        switch url.host {
-        case "toggle":
-            // Only toggle if UV > 0, matching the main app behavior
-            if uvService.currentUV > 0 {
-                if vitaminDCalculator.isInSun && vitaminDCalculator.sessionVitaminD > 0 {
-                    // Ending session - show completion sheet
-                    // Store session data BEFORE toggling (which might clear it)
-                    pendingSessionStartTime = vitaminDCalculator.sessionStartTime
-                    pendingSessionAmount = vitaminDCalculator.sessionVitaminD
-                    // Don't toggle yet - let the sheet handle it
-                    showSessionCompletionSheet = true
-                } else {
-                    // Starting session - just toggle
-                    vitaminDCalculator.toggleSunExposure(uvIndex: uvService.currentUV)
-                }
-            }
-        default:
-            break
-        }
-    }
-    
-    private func moonPhaseIcon() -> String {
-        // Use the phase name from the API to select the correct icon
-        let phaseName = uvService.currentMoonPhaseName.lowercased()
-        
-        // Map phase names to SF Symbols
-        // Note: Farmsense API has typo "Cresent" instead of "Crescent"
-        let icon: String
-        if phaseName.contains("new") {
-            icon = "moonphase.new.moon"
-        } else if phaseName.contains("waxing") && phaseName.contains("cres") {
-            icon = "moonphase.waxing.crescent"
-        } else if phaseName.contains("first quarter") {
-            icon = "moonphase.first.quarter"
-        } else if phaseName.contains("waxing") && phaseName.contains("gibbous") {
-            icon = "moonphase.waxing.gibbous"
-        } else if phaseName.contains("full") {
-            icon = "moonphase.full.moon"
-        } else if phaseName.contains("waning") && phaseName.contains("gibbous") {
-            icon = "moonphase.waning.gibbous"
-        } else if phaseName.contains("last quarter") || phaseName.contains("third quarter") {
-            icon = "moonphase.last.quarter"
-        } else if phaseName.contains("waning") && phaseName.contains("cres") {
-            icon = "moonphase.waning.crescent"
-        } else {
-            // Fallback based on illumination if phase name doesn't match
-            if uvService.currentMoonPhase > 0.85 {
-                icon = "moonphase.full.moon"
-            } else {
-                icon = "moon"
-            }
-        }
-        
-        return icon
-    }
-    
-    private func formatSafeTime(_ minutes: Int) -> String {
-        if minutes < 60 {
-            return "\(minutes) min"
-        } else {
-            let hours = minutes / 60
-            let remainingMinutes = minutes % 60
-            if remainingMinutes == 0 {
-                return "\(hours) hr"
-            } else {
-                return "\(hours)h \(remainingMinutes)m"
-            }
-        }
-    }
-    
-    private func contentFitsInScreen(geometry: GeometryProxy) -> Bool {
-        // Estimate content height
-        let estimatedHeight: CGFloat = 40 + 250 + 140 + 70 + 70 + 70 + 40 // header + UV + vitD + button + clothing + skin + padding
-        let offlineBarHeight: CGFloat = uvService.isOfflineMode ? 50 : 0
-        return estimatedHeight + offlineBarHeight < geometry.size.height
-    }
 }
 
 struct ClothingPicker: View {
@@ -1077,20 +667,7 @@ struct SkinTypePicker: View {
             .navigationTitle("Fitzpatrick Skin Type")
             .navigationBarItems(trailing: Button("Done") { dismiss() })
             .preferredColorScheme(.dark)
-            .safeAreaInset(edge: .bottom) {
-                if vitaminDCalculator.skinTypeFromHealth {
-                    HStack {
-                        Image(systemName: "heart.fill")
-                            .font(.system(size: 14))
-                        Text("Synced from Apple Health")
-                            .font(.caption)
-                    }
-                    .foregroundColor(.secondary)
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(Color(UIColor.secondarySystemBackground))
-                }
-            }
+
         }
         .presentationBackground(Color(UIColor.systemBackground).opacity(0.99))
     }
@@ -1102,7 +679,7 @@ struct SkinTypePicker: View {
         case .type3: return "Sometimes burns, tans uniformly"
         case .type4: return "Burns minimally, tans well"
         case .type5: return "Rarely burns, tans profusely"
-        case .type6: return "Never burns, deeply pigmented"
+        case .type6: return "Deeply pigmented; can still burn"
         }
     }
     
@@ -1144,178 +721,74 @@ extension Color {
     }
 }
 
+
 struct InfoSheet: View {
     @Environment(\.dismiss) var dismiss
-    @EnvironmentObject var vitaminDCalculator: VitaminDCalculator
-    @EnvironmentObject var uvService: UVService
-    
+    @EnvironmentObject private var sessions: VitaminDCalculator
+    @EnvironmentObject private var health: HealthManager
     var body: some View {
         NavigationView {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    // About the calculation
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("About")
-                            .font(.headline)
-                        
-                        Text("Sun Day uses a scientifically-based multi-factor model to estimate vitamin D synthesis from UV exposure.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        
-                        Text("The calculation considers UV intensity, time of day, clothing coverage, skin type, age, and recent exposure history.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        
-                        Text("Base rate: 21,000 IU/hr (minimal clothing, ~80% exposure)")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        
-                        Link("View detailed methodology", destination: URL(string: "https://github.com/jackjackbits/sunday/blob/main/METHODOLOGY.md")!)
-                            .font(.caption)
-                            .foregroundColor(.blue)
+                        Text("About").font(.headline)
+                        Text("Fry Day estimates vitamin D from UV forecasts, clothing, sunscreen, skin type, and optional age. The inherited model has not been clinically validated.").font(.caption).foregroundColor(.secondary)
+                        Text("Estimates are not measurements or safe-exposure limits. Check with a clinician before making medical decisions. Reminders are check-ins, not burn predictions.").font(.caption).foregroundColor(.secondary)
+                        Link("View detailed methodology", destination: URL(string: "https://github.com/khouryg/fry-day/blob/main/METHODOLOGY.md")!).font(.caption)
                     }
-                    
-                    // Current Calculation Factors
-                    VStack(alignment: .leading, spacing: 15) {
-                        Text("Current Factors")
-                            .font(.headline)
-                            .foregroundColor(.primary)
-                        
-                        VStack(alignment: .leading, spacing: 10) {
-                            FactorRow(
-                                label: "UV Factor",
-                                value: String(format: "%.2fx", (uvService.currentUV * 3.0) / (4.0 + uvService.currentUV)),
-                                detail: "Non-linear response curve"
-                            )
-                            
-                            FactorRow(
-                                label: "UV Quality",
-                                value: String(format: "%.0f%%", vitaminDCalculator.currentUVQualityFactor * 100),
-                                detail: "Time of day effectiveness"
-                            )
-                            
-                            FactorRow(
-                                label: "Clothing",
-                                value: String(format: "%.0f%%", vitaminDCalculator.clothingLevel.exposureFactor * 100),
-                                detail: vitaminDCalculator.clothingLevel.description
-                            )
-                            
-                            FactorRow(
-                                label: "Sunscreen",
-                                value: String(format: "%.0f%%", vitaminDCalculator.sunscreenLevel.uvTransmissionFactor * 100),
-                                detail: vitaminDCalculator.sunscreenLevel.description
-                            )
-                            
-                            FactorRow(
-                                label: "Skin Type",
-                                value: String(format: "%.0f%%", vitaminDCalculator.skinType.vitaminDFactor * 100),
-                                detail: vitaminDCalculator.skinType.description
-                            )
-                            
-                            if vitaminDCalculator.userAge != nil {
-                                FactorRow(
-                                    label: "Age Factor",
-                                    value: String(format: "%.0f%%", calculateAgeFactor() * 100),
-                                    detail: "Age \(vitaminDCalculator.userAge!)"
-                                )
-                            }
-                            
-                            FactorRow(
-                                label: "Adaptation",
-                                value: String(format: "%.1fx", vitaminDCalculator.currentAdaptationFactor),
-                                detail: "Based on 7-day history"
-                            )
-                            
-                            if uvService.currentAltitude > 100 {
-                                FactorRow(
-                                    label: "Altitude",
-                                    value: String(format: "+%.0f%%", (uvService.uvMultiplier - 1) * 100),
-                                    detail: "\(Int(uvService.currentAltitude))m elevation"
-                                )
-                            }
-                        }
-                        .padding(.horizontal)
-                        .padding(.vertical, 10)
-                        .background(Color.secondary.opacity(0.1))
-                        .cornerRadius(10)
-                    }
-                    
-                    // Data sources
+                    NavigationLink("Saved sessions") { SessionHistoryView() }
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("Data Sources")
-                            .font(.headline)
-                        
-                        HStack {
-                            Image(systemName: "location.circle.fill")
-                                .foregroundColor(.blue)
-                            Text("Location from device GPS")
-                                .font(.caption)
+                        Text("Optional Health profile").font(.headline)
+                        Text("Sessions save on this device. No vitamin D estimates are written to Health.").font(.caption).foregroundColor(.secondary)
+                        Button("Use available age and skin type") {
+                            health.loadProfile { age, skin in
+                                var settings = sessions.settings
+                                if let age { settings.age = age }
+                                if let skin { settings.skin = skin }
+                                sessions.updateSettings(settings)
+                            }
+                        }.font(.caption)
+                        if let age = sessions.settings.age {
+                            Text("Age used: \(age)").font(.caption)
+                            Button("Clear imported age") { var settings = sessions.settings; settings.age = nil; sessions.updateSettings(settings) }.font(.caption)
                         }
-                        
-                        HStack {
-                            Image(systemName: "sun.max.fill")
-                                .foregroundColor(.orange)
-                            Text("UV data from Open-Meteo")
-                                .font(.caption)
-                        }
-                        
-                        HStack {
-                            Image(systemName: "heart.fill")
-                                .foregroundColor(.red)
-                            Text("Health data from Apple Health")
-                                .font(.caption)
-                        }
+                        if let error = health.lastError { Text(error).font(.caption).foregroundColor(.secondary) }
                     }
-                    
-                    Spacer(minLength: 20)
-                }
-                .padding()
-            }
-            .navigationTitle("How It Works")
-            .navigationBarTitleDisplayMode(.inline)
-            .navigationBarItems(trailing: Button("Done") { dismiss() })
-            .preferredColorScheme(.dark)
-        }
-        .presentationBackground(Color(UIColor.systemBackground).opacity(0.99))
-    }
-    
-    private func calculateAgeFactor() -> Double {
-        guard let age = vitaminDCalculator.userAge else {
-            return 1.0
-        }
-        
-        if age <= 20 {
-            return 1.0
-        } else if age >= 70 {
-            return 0.25
-        } else {
-            // Match the calculator's age slope (~1% per year after 20)
-            return max(0.25, 1.0 - Double(age - 20) * 0.01)
-        }
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Data Sources & Privacy").font(.headline)
+                        Link("UV data from Open-Meteo", destination: URL(string: "https://open-meteo.com/")!).font(.caption)
+                        Link("Weather license: CC BY 4.0", destination: URL(string: "https://creativecommons.org/licenses/by/4.0/")!).font(.caption)
+                        Text("Hourly forecast values are interpolated for exposure estimates. Moon icons use an approximate on-device lunar cycle.").font(.caption).foregroundColor(.secondary)
+                        Link("Privacy policy", destination: URL(string: "https://github.com/khouryg/fry-day/blob/main/PRIVACY.md")!).font(.caption)
+                        Link("Support and source code", destination: URL(string: "https://github.com/khouryg/fry-day")!).font(.caption)
+                        Text("An independent continuation of Sun Day by jackjackbits and contributors, released under the Unlicense.").font(.caption).foregroundColor(.secondary)
+                        Link("Original project", destination: URL(string: "https://github.com/jackjackbits/sunday")!).font(.caption)
+                    }
+                }.padding()
+            }.navigationTitle("How It Works").navigationBarTitleDisplayMode(.inline)
+                .navigationBarItems(trailing: Button("Done") { dismiss() }).preferredColorScheme(.dark)
+        }.presentationBackground(Color(UIColor.systemBackground).opacity(0.99))
     }
 }
 
-struct FactorRow: View {
-    let label: String
-    let value: String
-    let detail: String
-    
+struct SessionHistoryView: View {
+    @EnvironmentObject private var sessions: VitaminDCalculator
+    @State private var deleteID: UUID?
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(label)
-                    .font(.caption)
-                    .fontWeight(.medium)
-                Text(detail)
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
+        List {
+            if sessions.completed.isEmpty { ContentUnavailableView("No saved sessions", systemImage: "sun.horizon", description: Text("Completed sessions will appear here.")) }
+            ForEach(sessions.completed) { session in
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(session.start.formatted(date: .abbreviated, time: .shortened)).font(.headline)
+                    let end = session.end ?? session.start
+                    Text("\(Int(end.timeIntervalSince(session.start) / 60)) min · \(session.totals(until: end).iu, specifier: "%.0f") IU estimated").foregroundStyle(.secondary)
+                }.swipeActions {
+                    Button("Delete", role: .destructive) { deleteID = session.id }
+                }
             }
-            
-            Spacer()
-            
-            Text(value)
-                .font(.system(.body, design: .monospaced))
-                .fontWeight(.medium)
-        }
+        }.navigationTitle("Session history")
+            .confirmationDialog("Delete this saved session?", isPresented: Binding(get: { deleteID != nil }, set: { if !$0 { deleteID = nil } })) {
+                Button("Delete session", role: .destructive) { if let id = deleteID { sessions.deleteSession(id: id) }; deleteID = nil }
+            }
     }
 }

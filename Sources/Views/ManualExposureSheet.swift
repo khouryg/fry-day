@@ -6,7 +6,6 @@ struct ManualExposureSheet: View {
     @EnvironmentObject var vitaminDCalculator: VitaminDCalculator
     @EnvironmentObject var uvService: UVService
     @EnvironmentObject var locationManager: LocationManager
-    @EnvironmentObject var healthManager: HealthManager
     
     @State private var startTime = Date()
     @State private var endTime = Date()
@@ -246,11 +245,11 @@ struct ManualExposureSheet: View {
                             .frame(maxWidth: .infinity)
 
                             // Save button
-                            Button(action: saveToHealth) {
+                            Button(action: saveSession) {
                                 HStack {
-                                    Image(systemName: "heart.fill")
+                                    Image(systemName: "checkmark.circle.fill")
                                         .font(.system(size: 16))
-                                    Text("Save to Health")
+                                    Text("Save Session")
                                         .font(.system(size: 18, weight: .semibold))
                                 }
                                 .foregroundColor(.white)
@@ -288,7 +287,9 @@ struct ManualExposureSheet: View {
         .onAppear {
             // Set default times - 1 hour ago to now
             let now = Date()
-            startTime = now.addingTimeInterval(-3600) // 1 hour ago
+            selectedClothing = vitaminDCalculator.settings.clothing
+            selectedSunscreen = vitaminDCalculator.settings.sunscreen
+            startTime = max(calendar.startOfDay(for: now), now.addingTimeInterval(-3600)) // 1 hour ago
             endTime = now
             
             // Calculate initial vitamin D
@@ -296,165 +297,30 @@ struct ManualExposureSheet: View {
         }
     }
     
+    private var entrySettings: ExposureSettings {
+        var value = vitaminDCalculator.settings
+        value.clothing = selectedClothing
+        value.sunscreen = selectedSunscreen
+        return value
+    }
     private func calculateVitaminD() {
-        errorMessage = nil
-        isCalculating = true
-        uvDataPoints.removeAll()
-        
-        // Ensure we have location
-        guard let location = locationManager.location else {
-            errorMessage = "Location not available"
-            isCalculating = false
+        isCalculating = false
+        let session = ExposureSession(start: startTime, end: endTime, reminderDate: endTime,
+            segments: [ExposureSegment(start: startTime, settings: entrySettings, forecast: uvService.samples)])
+        let totals = session.totals(until: endTime)
+        guard startTime < endTime, totals.coveredSeconds >= endTime.timeIntervalSince(startTime) - 1 else {
+            calculatedVitaminD = 0
+            errorMessage = "Choose an interval covered by the available UV forecast. Missing weather data is not estimated."
+            uvDataPoints = []
             return
         }
-        
-        Task {
-            // Fetch historical UV data for today
-            let historicalUV = await fetchHistoricalUV(for: location, from: startTime, to: endTime)
-            
-            await MainActor.run {
-                guard !historicalUV.isEmpty else {
-                    errorMessage = "Could not fetch UV data for this time period"
-                    isCalculating = false
-                    return
-                }
-                
-                // Store UV data points for display
-                uvDataPoints = historicalUV
-                
-                // Calculate vitamin D for each interval
-                var totalVitaminD = 0.0
-                
-                for i in 0..<historicalUV.count {
-                    let uvIndex = historicalUV[i].uv
-                    
-                    // Calculate duration for this interval
-                    let intervalStart = historicalUV[i].time
-                    let intervalEnd: Date
-                    
-                    if i < historicalUV.count - 1 {
-                        intervalEnd = historicalUV[i + 1].time
-                    } else {
-                        intervalEnd = endTime
-                    }
-                    
-                    let duration = intervalEnd.timeIntervalSince(intervalStart) / 60.0 // minutes
-                    
-                    // Calculate vitamin D for this interval
-                    let vitaminD = vitaminDCalculator.calculateVitaminD(
-                        uvIndex: uvIndex,
-                        exposureMinutes: duration,
-                        skinType: vitaminDCalculator.skinType,
-                        clothingLevel: selectedClothing,
-                        sunscreenLevel: selectedSunscreen
-                    )
-                    
-                    totalVitaminD += vitaminD
-                }
-                
-                calculatedVitaminD = totalVitaminD
-                isCalculating = false
-            }
-        }
+        errorMessage = nil
+        calculatedVitaminD = totals.iu
+        uvDataPoints = uvService.samples.filter { $0.date >= startTime && $0.date <= endTime }.map { (time: $0.date, uv: $0.uv) }
     }
-    
-    private func fetchHistoricalUV(for location: CLLocation, from startTime: Date, to endTime: Date) async -> [(time: Date, uv: Double)] {
-        // Prefer cached hourly UV from UVService when available
-        let cached = uvService.historicalUVPoints(from: startTime, to: endTime, near: location)
-        if !cached.isEmpty {
-            return cached.map { (time: $0.0, uv: $0.1) }
-        }
-
-        // Fallback: estimate via solar elevation if cache is unavailable
-        var dataPoints: [(time: Date, uv: Double)] = []
-        var currentTime = startTime
-        let hourInterval: TimeInterval = 3600 // 1 hour
-        while currentTime <= endTime {
-            let uvIndex = await estimateUVForTime(currentTime, at: location)
-            dataPoints.append((time: currentTime, uv: uvIndex))
-            currentTime = currentTime.addingTimeInterval(hourInterval)
-        }
-        if dataPoints.last?.time != endTime {
-            let uvIndex = await estimateUVForTime(endTime, at: location)
-            dataPoints.append((time: endTime, uv: uvIndex))
-        }
-        return dataPoints
-    }
-    
-    private func estimateUVForTime(_ time: Date, at location: CLLocation) async -> Double {
-        // This is a simplified estimation based on solar elevation
-        // In a real app, you'd fetch actual historical UV data from the API
-        
-        let solarData = calculateSolarPosition(for: time, at: location)
-        
-        // Simple UV estimation based on solar elevation
-        if solarData.elevation <= 0 {
-            return 0 // No UV when sun is below horizon
-        }
-        
-        // Get the current day's max UV (this should come from API)
-        let maxUV = await getCurrentDayMaxUV()
-        
-        // Estimate UV based on solar elevation
-        // UV is roughly proportional to sin(elevation) with adjustments
-        let elevationRadians = solarData.elevation * .pi / 180
-        let uvFactor = max(0, sin(elevationRadians))
-        
-        return maxUV * uvFactor
-    }
-    
-    private func getCurrentDayMaxUV() async -> Double {
-        // In a real implementation, this would fetch from the API
-        // For now, use current UV as a rough approximation
-        return max(uvService.currentUV, 5.0) // Assume at least UV 5 for midday
-    }
-    
-    private func calculateSolarPosition(for date: Date, at location: CLLocation) -> (elevation: Double, azimuth: Double) {
-        // Simplified solar position calculation
-        // In production, use a proper astronomy library
-        
-        let latitude = location.coordinate.latitude
-        let longitude = location.coordinate.longitude
-        
-        let calendar = Calendar.current
-        let dayOfYear = calendar.ordinality(of: .day, in: .year, for: date) ?? 1
-        
-        // Solar declination (simplified)
-        let declination = 23.45 * sin(360.0 * Double(dayOfYear - 81) / 365.0 * .pi / 180.0)
-        
-        // Hour angle
-        let components = calendar.dateComponents([.hour, .minute], from: date)
-        let hourOfDay = Double(components.hour ?? 12) + Double(components.minute ?? 0) / 60.0
-        let solarNoon = 12.0 - longitude / 15.0 // Simplified
-        let hourAngle = 15.0 * (hourOfDay - solarNoon)
-        
-        // Solar elevation (simplified)
-        let latRad = latitude * .pi / 180.0
-        let decRad = declination * .pi / 180.0
-        let hourRad = hourAngle * .pi / 180.0
-        
-        let elevation = asin(sin(latRad) * sin(decRad) + cos(latRad) * cos(decRad) * cos(hourRad)) * 180.0 / .pi
-        
-        return (elevation: elevation, azimuth: 0) // Azimuth calculation omitted for simplicity
-    }
-    
-    private func saveToHealth() {
-        // Save to Health with completion to ensure caches refresh
-        let amount = calculatedVitaminD
-        healthManager.saveVitaminD(amount: amount) { _ in
-            // Update UI immediately with manual addition
-            vitaminDCalculator.addManualEntry(amount: amount)
-            // Refresh cached Health base and widget
-            vitaminDCalculator.refreshTodayTotals(forceWidget: true)
-        }
-        
-        // Haptic feedback
-        let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
-        impactFeedback.impactOccurred()
-        
-        // Dismiss after short delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+    private func saveSession() {
+        if vitaminDCalculator.addManualSession(start: startTime, end: endTime, settings: entrySettings, forecast: uvService.samples) {
             dismiss()
-        }
+        } else { errorMessage = vitaminDCalculator.errorMessage }
     }
 }

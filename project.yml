@@ -1,89 +1,93 @@
-name: Sunday
+name: FryDay
 options:
-  bundleIdPrefix: it.sunday
+  bundleIdPrefix: com.khouryg.fryday
   deploymentTarget:
-    iOS: 17.0
+    iOS: "17.0"
 settings:
   base:
-    PRODUCT_BUNDLE_IDENTIFIER: it.sunday.app
     MARKETING_VERSION: 1.0.0
     CURRENT_PROJECT_VERSION: 1
-    DEVELOPMENT_TEAM: "L3N5LHJD5Y"
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1"
+    SUPPORTS_MACCATALYST: false
+    SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: false
+    SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: false
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: 5G2JU987CA
 targets:
-  Sunday:
+  FryDay:
     type: application
     platform: iOS
     sources:
       - Sources
-    resources:
-      - Resources/Assets.xcassets
-      - Resources/LaunchScreen.storyboard
+      - Shared
+      - path: Resources/Assets.xcassets
+      - path: Resources/LaunchScreen.storyboard
+      - path: Resources/PrivacyInfo.xcprivacy
+        buildPhase: resources
     info:
       path: Resources/Info.plist
       properties:
-        CFBundleDisplayName: Sun Day
-        LSApplicationCategoryType: public.app-category.healthcare-fitness
+        CFBundleDisplayName: Fry Day
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchStoryboardName: LaunchScreen
-        UISupportedInterfaceOrientations: 
-          - UIInterfaceOrientationPortrait
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         UIRequiresFullScreen: true
-        NSLocationWhenInUseUsageDescription: "Sun Day needs your location to determine UV levels at your current position"
-        NSLocationAlwaysAndWhenInUseUsageDescription: "Sun Day needs your location to track UV exposure throughout the day"
-        NSHealthShareUsageDescription: "Sun Day reads your health data to provide personalized vitamin D recommendations"
-        NSHealthUpdateUsageDescription: "Sun Day saves your vitamin D intake data to Health app"
-        UIUserInterfaceStyle: Light
-        NSUserNotificationCenterUsageDescription: "Sun Day sends reminders for sunrise, sunset, and solar noon to help you track vitamin D"
+        NSLocationWhenInUseUsageDescription: Fry Day uses your location to request the local UV forecast from Open-Meteo.
+        NSHealthShareUsageDescription: Optionally read your age and skin type to personalize exposure estimates on this device.
+        NSSupportsLiveActivities: true
+        ITSAppUsesNonExemptEncryption: false
         CFBundleURLTypes:
-          - CFBundleURLSchemes:
-              - sunday
-            CFBundleURLName: com.jack.sunday
+          - CFBundleURLName: com.khouryg.fryday
+            CFBundleURLSchemes: [fryday]
     settings:
       base:
-        INFOPLIST_FILE: Resources/Info.plist
-        ENABLE_PREVIEWS: YES
-        DEVELOPMENT_ASSET_PATHS: "Sources"
+        PRODUCT_BUNDLE_IDENTIFIER: com.khouryg.fryday
         CODE_SIGN_ENTITLEMENTS: Resources/Sunday.entitlements
-        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_APPICON_NAME: FryDayIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
-        TARGETED_DEVICE_FAMILY: "1"
-        SUPPORTS_MACCATALYST: false
-        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: false
-        SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: false
-    capabilities:
-      - com.apple.HealthKit
-      - com.apple.BackgroundModes:
-          enabled: true
-          modes:
-            - location
-      - com.apple.ApplicationGroups:
-          enabled: true
-          groups:
-            - group.sunday.widget
     dependencies:
-      - target: SundayWidget
-  
-  SundayWidget:
+      - target: FryDayWidget
+  FryDayWidget:
     type: app-extension
     platform: iOS
     sources:
-      - SundayWidget
-    resources:
-      - SundayWidget/Assets.xcassets
+      - path: SundayWidget
+        excludes: [Info.plist, SundayWidget.intentdefinition, SundayWidget.entitlements]
+      - Shared
+      - Sources/Models/UVSample.swift
+      - Sources/Models/WeatherForecast.swift
+      - path: Resources/PrivacyInfo.xcprivacy
+        buildPhase: resources
     info:
       path: SundayWidget/Info.plist
       properties:
-        CFBundleDisplayName: Sun Day Widget
+        CFBundleDisplayName: Fry Day
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: it.sunday.app.widget
-        INFOPLIST_FILE: SundayWidget/Info.plist
-        SKIP_INSTALL: true
-        TARGETED_DEVICE_FAMILY: "1"
+        PRODUCT_BUNDLE_IDENTIFIER: com.khouryg.fryday.widget
         CODE_SIGN_ENTITLEMENTS: SundayWidget/SundayWidget.entitlements
-    capabilities:
-      - com.apple.ApplicationGroups:
-          enabled: true
-          groups:
-            - group.sunday.widget
+        SKIP_INSTALL: true
+  FryDayTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [Tests]
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.khouryg.fryday.tests
+    dependencies:
+      - target: FryDay
+schemes:
+  FryDay:
+    build:
+      targets:
+        FryDay: all
+        FryDayTests: [test]
+    test:
+      targets: [FryDayTests]

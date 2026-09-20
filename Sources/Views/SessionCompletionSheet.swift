@@ -1,28 +1,17 @@
 import SwiftUI
-import HealthKit
-import SwiftData
 
 struct SessionCompletionSheet: View {
     @Environment(\.dismiss) var dismiss
     @EnvironmentObject var vitaminDCalculator: VitaminDCalculator
-    @EnvironmentObject var healthManager: HealthManager
-    @Environment(\.modelContext) private var modelContext
-    
-    let sessionStartTime: Date
-    let sessionAmount: Double
-    let onSave: () -> Void
-    let onCancel: () -> Void
-    
+    let session: ExposureSession
+    private var sessionStartTime: Date { session.start }
+    private var sessionAmount: Double { session.totals(until: selectedEndTime).iu }
     @State private var selectedEndTime: Date
-    
-    init(sessionStartTime: Date, sessionAmount: Double, onSave: @escaping () -> Void, onCancel: @escaping () -> Void) {
-        self.sessionStartTime = sessionStartTime
-        self.sessionAmount = sessionAmount
-        self.onSave = onSave
-        self.onCancel = onCancel
-        self._selectedEndTime = State(initialValue: Date())
+    init(session: ExposureSession) {
+        self.session = session
+        _selectedEndTime = State(initialValue: session.end ?? Date())
     }
-    
+
     private var sessionDuration: TimeInterval {
         selectedEndTime.timeIntervalSince(sessionStartTime)
     }
@@ -81,7 +70,7 @@ struct SessionCompletionSheet: View {
                     VStack(spacing: 16) {
                         // Vitamin D amount
                         VStack(spacing: 4) {
-                            Text("VITAMIN D SYNTHESIZED")
+                            Text("VITAMIN D ESTIMATE")
                                 .font(.system(size: 12, weight: .bold))
                                 .foregroundColor(.white.opacity(0.7))
                                 .tracking(1.2)
@@ -128,8 +117,8 @@ struct SessionCompletionSheet: View {
                                 .tracking(1.2)
                             
                             DatePicker("", selection: $selectedEndTime, 
-                                      in: sessionStartTime...Date(), 
-                                      displayedComponents: [.hourAndMinute])
+                                      in: sessionStartTime...(session.end ?? Date()),
+                                      displayedComponents: [.date, .hourAndMinute])
                                 .datePickerStyle(.wheel)
                                 .labelsHidden()
                                 .colorScheme(.dark)
@@ -146,15 +135,18 @@ struct SessionCompletionSheet: View {
                 
                 Spacer()
                 
+                if let error = vitaminDCalculator.errorMessage {
+                    Text(error).font(.caption).foregroundColor(.white).padding(.horizontal)
+                }
                 // Action buttons
                 VStack(spacing: 12) {
                     Button(action: {
                         saveSession()
                     }) {
                         HStack {
-                            Image(systemName: "heart.fill")
+                            Image(systemName: "checkmark.circle.fill")
                                 .font(.system(size: 18))
-                            Text("Save to Health")
+                            Text("Save Session")
                                 .font(.system(size: 18, weight: .semibold))
                         }
                         .foregroundColor(.white)
@@ -165,8 +157,7 @@ struct SessionCompletionSheet: View {
                     }
                     
                     Button(action: {
-                        onCancel()
-                        dismiss()
+                        vitaminDCalculator.continueSession()
                     }) {
                         Text("Continue Tracking")
                             .font(.system(size: 16, weight: .medium))
@@ -194,6 +185,7 @@ struct SessionCompletionSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .preferredColorScheme(.dark)
         }
+        .interactiveDismissDisabled()
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         // Keep the sheet background clear to match ManualExposureSheet, avoiding white flash
@@ -207,35 +199,9 @@ struct SessionCompletionSheet: View {
     }
     
     private func saveSession() {
-        // Save to HealthKit and wait for completion to ensure UI updates reflect the saved sample
-        healthManager.saveVitaminD(amount: sessionAmount) { _ in
-            // Refresh today's base from Health for accurate totals and widget
-            vitaminDCalculator.refreshTodayTotals(forceWidget: true)
-            // Create and save session record to SwiftData
-            let session = VitaminDSession(
-                startTime: sessionStartTime,
-                totalIU: sessionAmount,
-                averageUV: 0, // TODO: Calculate average UV
-                peakUV: 0, // TODO: Track peak UV
-                clothingLevel: vitaminDCalculator.clothingLevel.rawValue,
-                skinType: vitaminDCalculator.skinType.rawValue
-            )
-            session.endTime = selectedEndTime
-            
-            modelContext.insert(session)
-            try? modelContext.save()
-            
-            // Call completion handler and dismiss
-            onSave()
-            dismiss()
-        }
+        _ = vitaminDCalculator.saveSession(end: selectedEndTime)
     }
-    
     private func endWithoutSaving() {
-        // Just end the session without saving to HealthKit
-        // Reset session amount before toggling to avoid re-presenting the sheet
-        vitaminDCalculator.sessionVitaminD = 0.0
-        vitaminDCalculator.toggleSunExposure(uvIndex: 0)
-        dismiss()
+        _ = vitaminDCalculator.discardSession()
     }
 }
