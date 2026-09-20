@@ -23,9 +23,9 @@ Calculation integrates rates in steps of at most one minute, splitting at foreca
 
 Forecasts describe ambient conditions, not personal exposure. Shade, glass, orientation, clothing coverage, and sunscreen use introduce uncertainty. The app does not infer whether the user has gone indoors.
 
-## Reminders and Health
+## Live Activities and Health
 
-The reminder interval is selected by the user and is not a burn limit. Live Activities do not keep app code running continuously. Persisted timestamps let elapsed timers render while the app is suspended, and local notifications provide a separate check-in.
+Live Activities start automatically with a session and do not keep app code running continuously. Persisted timestamps let elapsed timers render while the app is suspended. The app does not schedule notifications or calculate a safe-exposure countdown.
 
 Modeled estimates are stored only in Fry Day. They are not exported to Health's dietary vitamin D field, which measures consumption. Optional Health access reads age and skin type only.
 

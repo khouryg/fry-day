@@ -1,6 +1,6 @@
 # Fry Day privacy policy
 
-Updated September 19, 2026.
+Updated September 20, 2026.
 
 Fry Day is an independent continuation of Sun Day. This policy describes the Fry Day implementation in this repository.
 
@@ -18,9 +18,9 @@ Apple Health integration is optional and requested only when you choose to impor
 
 ## Widgets, Live Activities, and notifications
 
-The app shares a minimal snapshot with its own widget using an App Group: the last location name, coordinates and forecast, estimated daily total, and active session identity/start time. These values stay on-device and may be visible on the Home Screen. Live Activities display session time and reminder/forecast information on the Lock Screen and Dynamic Island; anyone who can see your screen may see that information. You can disable widgets, Live Activities, and notifications through iOS controls.
+The app shares a minimal snapshot with its own widget using an App Group: the last location name, coordinates and forecast, estimated daily total, and active session identity/start time. These values stay on-device and may be visible on the Home Screen. Live Activities display session time and forecast information on the Lock Screen and Dynamic Island; anyone who can see your screen may see that information. You can disable widgets and Live Activities through iOS controls.
 
-Check-in reminders use local notifications. Fry Day does not operate a push notification server. A reminder can be delayed or hidden by iOS notification settings or Focus modes.
+Fry Day does not schedule notifications or request notification permission. Upgrading from the first beta cancels its previously scheduled session reminders. Fry Day does not operate a push notification server.
 
 ## Other collection and services
 

@@ -25,7 +25,7 @@ final class SessionActivityController {
                 await existing.update(content)
             } else if allowStart {
                 guard ActivityAuthorizationInfo().areActivitiesEnabled else {
-                    status = "Live Activities are disabled. Session reminders are still available."
+                    status = "Live Activities are disabled. Enable them in Settings to see the session on your Lock Screen."
                     return
                 }
                 do {
@@ -39,41 +39,10 @@ final class SessionActivityController {
     }
 }
 
-@MainActor
-final class SessionReminderController {
-    private var work: Task<Void, Never>?
-    private let identifiers = ["sessionReminder", "burnWarning", "sunrise", "sunset", "solarNoon", "safeTimeReached"]
-
-    func synchronize(session: ExposureSession?, requestPermission: Bool, onStatus: @escaping (String?) -> Void) {
-        let previous = work
-        work = Task {
-            await previous?.value
-            let center = UNUserNotificationCenter.current()
-            center.removePendingNotificationRequests(withIdentifiers: identifiers)
-            guard let session, session.end == nil else { return }
-            do {
-                let settings = await center.notificationSettings()
-                var allowed = settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional
-                if requestPermission && settings.authorizationStatus == .notDetermined {
-                    allowed = try await center.requestAuthorization(options: [.alert, .sound])
-                }
-                guard allowed else {
-                    onStatus("Notifications are disabled. Enable them in Settings to receive session reminders.")
-                    return
-                }
-                let content = UNMutableNotificationContent()
-                content.title = "Check your sun session"
-                content.body = "Still outdoors? Review your Fry Day session and take a shade break. This reminder is not a safe-exposure limit."
-                content.sound = .default
-                content.userInfo = ["sessionID": session.id.uuidString]
-                let delay = max(1, session.reminderDate.timeIntervalSinceNow)
-                // A persisted past deadline must not generate a new alert on every relaunch.
-                guard session.reminderDate > Date() || requestPermission else { return }
-                try await center.add(UNNotificationRequest(identifier: "sessionReminder", content: content, trigger: UNTimeIntervalNotificationTrigger(timeInterval: delay, repeats: false)))
-                onStatus(nil)
-            } catch {
-                onStatus("The reminder could not be scheduled. Your session is still saved.")
-            }
-        }
-    }
+// Cancel notifications already scheduled by earlier builds when upgrading.
+func removeLegacySessionNotifications() {
+    let identifiers = ["sessionReminder", "burnWarning", "sunrise", "sunset", "solarNoon", "safeTimeReached"]
+    let center = UNUserNotificationCenter.current()
+    center.removePendingNotificationRequests(withIdentifiers: identifiers)
+    center.removeDeliveredNotifications(withIdentifiers: identifiers)
 }
