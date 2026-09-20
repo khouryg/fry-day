@@ -21,3 +21,11 @@ Final verification: 32 tests passed on macOS and 34 on the iOS 26.2 simulator, i
 - Widget forecast timelines, Live Activities, reminders, and the visual layout retain their existing behavior.
 
 Physical-device energy profiling and travel/network-transition checks remain necessary to quantify battery savings and validate system scheduling.
+
+## Signed release candidate — September 20, 2026
+
+- Re-ran all 32 macOS tests and all 34 iOS simulator tests successfully.
+- Signed Release archive 1.0.0 (1) succeeded under team `5G2JU987CA`. App and widget identifiers, matching version/build, shared App Group entitlement, and both privacy manifests were verified in the archive.
+- Final frying-pan/sun-egg icon verified as 1024 × 1024 with no alpha. The existing screen layout was preserved and a compact estimate label was added.
+- Archive: `/private/tmp/FryDay-1.0.0-1.xcarchive`; build log: `/private/tmp/fryday-archive-1.log`.
+- Direct installation on the paired iPhone reported device-locked errors, including after an unlock attempt. No physical-device functional test is claimed.

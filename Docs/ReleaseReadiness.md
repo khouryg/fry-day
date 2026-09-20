@@ -1,14 +1,19 @@
 # Release readiness
 
-This branch is a development foundation, not an App Store submission or a guarantee of review approval.
+Release candidate 1.0.0 (1) is prepared. These checks do not guarantee App Review approval.
 
-- Register app/extension/App Group identifiers under the owner's Apple developer team and validate a signed archive.
-- Check the chosen name/icon against App Store availability and relevant branding rights. “Fry Day” is the user's chosen identity; availability has not been established.
-- Publish the revised privacy/methodology/support files on the default branch before releasing, so in-app links resolve to the correct documents.
-- Confirm non-commercial Open-Meteo usage and expected scale. Maintain attribution in the app and wherever UV data is displayed. No ads/subscriptions are implemented.
-- Review the inherited estimate model and health wording with appropriate scientific expertise. Do not reintroduce dietary vitamin D writes for synthesized estimates.
-- Verify Lock Screen/Dynamic Island behavior, End deep link, disabled Live Activities, notification denial/Focus, and force-quit recovery on physical devices. Live Activities are not continuous background execution and have system lifetime limits.
-- Exercise overnight sessions, corrected dates, offline/gapped forecasts, settings changes, save failures, and duplicate actions.
-- Check VoiceOver, Dynamic Type, small screens, and local record deletion.
-- Validate privacy manifests, App Store privacy answers, age rating, support contact, screenshots, version/build numbers, and archive resource contents.
-- Run `swift test`, iOS tests, and an archive build before any TestFlight/App Store submission. The repository does not configure automatic deployment.
+- [x] Registered app and widget identifiers plus App Group under team `5G2JU987CA`; signed archive succeeded September 20, 2026. App and widget both verified as 1.0.0 (1).
+- [x] Installed the approved frying-pan/sun-egg icon as an opaque 1024 × 1024 asset.
+- [x] Re-ran all 32 macOS tests and 34 iOS simulator tests successfully.
+- [x] Verified bundled icons, privacy manifests, shared App Group entitlement, and matching archive versions.
+- [x] Owner decision: keep the inherited vitamin D estimates for the first release and defer further scientific review. Their unvalidated status remains explicit in the app, methodology, and listing. No synthesized estimates are written to Health. This decision does not establish scientific validation or Apple approval.
+- [x] Checked Open-Meteo's current non-commercial terms and limits; see `AppStoreSubmission.md`. The app is free with no advertising or subscriptions. Capacity must be reassessed before a large rollout.
+- [ ] App Store listing name: Apple rejected “Fry Day” as already in use. Awaiting the owner's choice of descriptive listing name. Installed app name remains Fry Day. Name acceptance is not trademark clearance.
+- [ ] Publish the updated privacy/methodology/support documents on the default branch and verify their links.
+- [ ] Upload the signed build, verify processing/compliance, and assign a Fry Day internal tester group. Do not copy Mumblers testers.
+- [ ] Real-device functional checks: Lock Screen/Dynamic Island, End link, disabled permissions, Focus, travel, offline recovery, force-quit recovery, and battery. Direct installation currently reports that the paired iPhone is locked; use TestFlight or retry while it stays awake.
+- [ ] VoiceOver, Dynamic Type, and small-screen checks.
+- [ ] Store screenshots, privacy answers, age rating, support/review contact, free pricing, territories, and any required trader-status declaration.
+- [ ] Final listing and device-test review before public App Store submission.
+
+See [submission copy](AppStoreSubmission.md), [TestFlight workflow](TestFlightRelease.md), and [device beta checklist](DeviceTestChecklist.md).
