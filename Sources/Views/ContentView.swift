@@ -18,12 +18,16 @@ struct ContentView: View {
     var body: some View {
         ZStack {
             LinearGradient(colors: gradientColors, startPoint: .topLeading, endPoint: .bottomTrailing).ignoresSafeArea()
-            ViewThatFits(in: .vertical) {
-                dashboard(compact: false)
-                dashboard(compact: true)
+            GeometryReader { geometry in
+                ScrollView {
+                    dashboard
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 20)
+                        .frame(maxWidth: .infinity, minHeight: geometry.size.height)
+                        .frame(width: geometry.size.width)
+                }
+                .scrollBounceBehavior(.basedOnSize)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 8)
         }
 
         .sheet(isPresented: $showInfoSheet) { InfoSheet() }
@@ -69,29 +73,15 @@ struct ContentView: View {
     private func refreshWeather(force: Bool = false) {
         if let location = locationManager.location { uvService.fetchUVData(for: location, force: force, isTracking: vitaminDCalculator.isInSun) }
     }
-    // The home screen always fits one page; detailed explanations remain in How It Works.
-    private func dashboard(compact: Bool) -> some View {
-        VStack(spacing: compact ? 6 : 12) {
-            headerSection(compact: compact)
-            uvSection(compact: compact)
-            vitaminDSection(compact: compact)
+    // Preserve Sun Day's card order, dimensions, and spacing.
+    private var dashboard: some View {
+        VStack(spacing: 20) {
+            headerSection
+            uvSection
+            vitaminDSection
             exposureToggle
             HStack(spacing: 12) { clothingSection; sunscreenSection }
             skinTypeSection
-            VStack(spacing: 3) {
-                Button { showInfoSheet = true } label: {
-                    Text(vitaminDCalculator.hasIncompleteCoverage ? "Estimate excludes missing UV · Details" : "Vitamin D values are estimates · Details")
-                }
-                if let status = vitaminDCalculator.liveActivityStatus {
-                    Text(status).lineLimit(2)
-                }
-                if let error = uvService.lastError {
-                    Button("Refresh UV data") { refreshWeather(force: true) }.accessibilityHint(error)
-                }
-                Link("Weather by Open-Meteo · CC BY 4.0", destination: URL(string: "https://open-meteo.com/")!)
-            }
-            .font(.caption2).foregroundStyle(.white.opacity(0.7))
-            .multilineTextAlignment(.center)
         }
     }
     private var exposureToggle: some View {
@@ -105,14 +95,14 @@ struct ContentView: View {
                         .font(.system(size: 24)).symbolEffect(.pulse, isActive: vitaminDCalculator.isInSun)
                     Text(vitaminDCalculator.isInSun ? "End" : displayedUV == 0 ? "No UV available" : "Begin")
                         .font(.system(size: 18, weight: .semibold))
-                }.foregroundColor(.white).frame(maxWidth: .infinity).padding(.vertical, 12)
+                }.foregroundColor(.white).frame(maxWidth: .infinity).padding(.vertical, 20)
                     .background(vitaminDCalculator.isInSun ? Color.yellow.opacity(0.3) : Color.black.opacity(0.2)).cornerRadius(15)
             }
             .disabled(displayedUV == 0 && !vitaminDCalculator.isInSun)
             .opacity(displayedUV == 0 && !vitaminDCalculator.isInSun ? 0.6 : 1)
             Button { showManualExposureSheet = true } label: {
                 Image(systemName: "clock.arrow.circlepath").font(.system(size: 24)).foregroundColor(.white)
-                    .frame(width: 60).padding(.vertical, 12).background(Color.black.opacity(0.2)).cornerRadius(15)
+                    .frame(width: 60).padding(.vertical, 20).background(Color.black.opacity(0.2)).cornerRadius(15)
             }.accessibilityLabel("Log past exposure").disabled(vitaminDCalculator.active != nil).opacity(vitaminDCalculator.active != nil ? 0.4 : 1)
         }
     }
@@ -164,17 +154,17 @@ struct ContentView: View {
         }
     }
     
-    private func headerSection(compact: Bool) -> some View {
+    private var headerSection: some View {
         Button(action: { showInfoSheet = true }) {
             Text("FRY DAY")
-                .font(.system(size: compact ? 28 : 36, weight: .bold, design: .rounded))
+                .font(.system(size: 40, weight: .bold, design: .rounded))
                 .foregroundColor(.white)
                 .tracking(2)
         }
     }
     
-    private func uvSection(compact: Bool) -> some View {
-        VStack(spacing: compact ? 4 : 8) {
+    private var uvSection: some View {
+        VStack(spacing: 8) {
             if locationManager.authorizationStatus == .denied || locationManager.authorizationStatus == .restricted {
                 VStack(spacing: 10) {
                     Image(systemName: "location.slash")
@@ -203,7 +193,7 @@ struct ContentView: View {
                     .tracking(1.5)
                 
                 Text(uvService.currentUV.map { String(format: "%.1f", $0) } ?? "—")
-                    .font(.system(size: compact ? 44 : 64, weight: .bold, design: .rounded))
+                    .font(.system(size: 72, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
             }
             
@@ -323,7 +313,7 @@ struct ContentView: View {
                 .padding(.top, 8)
             }
         }
-        .padding(.vertical, compact ? 6 : 14)
+        .padding(.vertical, 20)
         .frame(maxWidth: .infinity)
         .background(Color.black.opacity(0.2))
         .cornerRadius(20)
@@ -331,7 +321,7 @@ struct ContentView: View {
     
     private var clothingSection: some View {
         Button(action: { showClothingPicker.toggle() }) {
-            VStack(spacing: 6) {
+            VStack(spacing: 10) {
                 Text("CLOTHING")
                     .font(.system(size: 10, weight: .bold))
                     .foregroundColor(.white.opacity(0.7))
@@ -347,7 +337,7 @@ struct ContentView: View {
                 .foregroundColor(.white)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
+            .padding(.vertical, 15)
             .background(Color.black.opacity(0.2))
             .cornerRadius(15)
         }
@@ -360,7 +350,7 @@ struct ContentView: View {
     
     private var sunscreenSection: some View {
         Button(action: { showSunscreenPicker.toggle() }) {
-            VStack(spacing: 6) {
+            VStack(spacing: 10) {
                 Text("SUNSCREEN")
                     .font(.system(size: 10, weight: .bold))
                     .foregroundColor(.white.opacity(0.7))
@@ -376,7 +366,7 @@ struct ContentView: View {
                 .foregroundColor(.white)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
+            .padding(.vertical, 15)
             .background(Color.black.opacity(0.2))
             .cornerRadius(15)
         }
@@ -389,7 +379,7 @@ struct ContentView: View {
     
     private var skinTypeSection: some View {
         Button(action: { showSkinTypePicker.toggle() }) {
-            VStack(spacing: 6) {
+            VStack(spacing: 10) {
                 Text("SKIN TYPE")
                     .font(.system(size: 10, weight: .bold))
                     .foregroundColor(.white.opacity(0.7))
@@ -405,7 +395,7 @@ struct ContentView: View {
                 .foregroundColor(.white)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
+            .padding(.vertical, 15)
             .background(Color.black.opacity(0.2))
             .cornerRadius(15)
         }
@@ -414,7 +404,7 @@ struct ContentView: View {
         }
     }
 
-    private func vitaminDSection(compact: Bool) -> some View {
+    private var vitaminDSection: some View {
         VStack(spacing: 15) {
             HStack(alignment: .top, spacing: 15) {
                 VStack(spacing: 8) {
@@ -506,7 +496,7 @@ struct ContentView: View {
                 .frame(minWidth: 100)
             }
         }
-        .padding(.vertical, compact ? 6 : 14)
+        .padding(.vertical, 20)
         .frame(maxWidth: .infinity)
         .background(Color.black.opacity(0.2))
         .cornerRadius(20)
@@ -706,6 +696,7 @@ struct InfoSheet: View {
     @EnvironmentObject private var sessions: VitaminDCalculator
     @EnvironmentObject private var health: HealthManager
     @EnvironmentObject private var uvService: UVService
+    @EnvironmentObject private var locationManager: LocationManager
     var body: some View {
         NavigationView {
             ScrollView {
@@ -717,10 +708,22 @@ struct InfoSheet: View {
                         Link("View detailed methodology", destination: URL(string: "https://github.com/khouryg/fry-day/blob/main/METHODOLOGY.md")!).font(.caption)
                     }
                     VStack(alignment: .leading, spacing: 10) {
+                        if sessions.hasIncompleteCoverage {
+                            Text("Missing UV intervals are excluded from this estimate.").font(.caption).foregroundColor(.secondary)
+                        }
+                        if let status = sessions.liveActivityStatus {
+                            Text(status).font(.caption).foregroundColor(.secondary)
+                        }
                         Text("Live Activity").font(.headline)
                         Text("Starting a session automatically shows its timer on the Lock Screen and Dynamic Island when Live Activities are enabled. End opens the session completion screen. No notification is scheduled.").font(.caption).foregroundColor(.secondary)
                         if let updated = uvService.lastSuccessfulUpdate {
                             Text("Forecast updated \(updated.formatted(date: .abbreviated, time: .shortened))").font(.caption).foregroundColor(.secondary)
+                        }
+                    }
+                    if let error = uvService.lastError {
+                        Text(error).font(.caption).foregroundColor(.secondary)
+                        Button("Refresh UV data") {
+                            if let location = locationManager.location { uvService.fetchUVData(for: location, force: true, isTracking: sessions.isInSun) }
                         }
                     }
                     NavigationLink("Saved sessions") { SessionHistoryView() }

@@ -76,3 +76,5 @@ TestFlight internal group: `Fry Day Internal` (`50519082-fc5c-49df-a3dd-0bb96e09
 Build 2 removes notification scheduling and reminder controls at the owner's request, and restores a non-scrolling home screen with compact spacing on shorter devices. The description, keywords, review notes, and subtitle in App Store Connect now reflect build 2. Owner-provided review contact details were entered directly in App Store Connect, not copied into the public repository.
 
 TestFlight 1.0.0 (2) completed processing and shows Testing in Fry Day Internal. Build ID: `9776da65-1f2e-44cd-ad47-09122c4835a9`. Testing notes describe the single-page layout and automatic Live Activity without notifications.
+
+TestFlight 1.0.0 (3) restores the original Sun Day card proportions and moves added footer details into How It Works. Upload and processing completed, release notes are saved, and Testing status is verified in the existing Fry Day Internal group. Build ID: `7c96f4ae-3e59-4a4a-8fbf-4d12af2bdc38`. No public App Store submission was made.
