@@ -13,6 +13,7 @@ settings:
     SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: false
     SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: false
     CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: 5G2JU987CA
 targets:
   FryDay:
     type: application

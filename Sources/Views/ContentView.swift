@@ -33,6 +33,7 @@ struct ContentView: View {
                     if vitaminDCalculator.hasIncompleteCoverage {
                         Text("Missing UV intervals are excluded from this estimate.").font(.caption).foregroundColor(.white.opacity(0.8))
                     }
+                    Text("Vitamin D values are estimates.").font(.caption2).foregroundColor(.white.opacity(0.7))
                     if let updated = uvService.lastSuccessfulUpdate {
                         Text("\(uvService.isOfflineMode ? "Cached forecast" : "Forecast") · \(updated.formatted(date: .omitted, time: .shortened))")
                             .font(.caption2).foregroundColor(.white.opacity(0.7))

@@ -13,14 +13,14 @@ xcodegen generate
 open FryDay.xcodeproj
 ```
 
-Choose your development team in Xcode. Register `com.khouryg.fryday`, `com.khouryg.fryday.widget`, and `group.com.khouryg.fryday` with that team before device signing. Set a different identifier prefix throughout the project if you are publishing your own derivative. No upstream signing team is embedded.
+Choose your development team in Xcode. Register `com.khouryg.fryday`, `com.khouryg.fryday.widget`, and `group.com.khouryg.fryday` with that team before device signing. Set a different identifier prefix throughout the project if you are publishing your own derivative. The configured team is the Fry Day maintainer’s team; choose your own team when building a separate derivative.
 
 ```sh
 swift test
 xcodebuild -project FryDay.xcodeproj -scheme FryDay -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
 ```
 
-The Swift package runs deterministic exposure/persistence regression tests on macOS. The same tests also run in the iOS test target. Generated Xcode projects are ignored; `project.yml` owns settings, resources, plists, and versioning. The original icon remains in the upstream history; Fry Day uses its own vector-designed icon (`Docs/AppIcon.svg`, rendered with `Scripts/render-icon.swift`).
+The Swift package runs deterministic exposure/persistence regression tests on macOS. The same tests also run in the iOS test target. Generated Xcode projects are ignored; `project.yml` owns settings, resources, plists, and versioning. Fry Day uses an original frying-pan/sun-egg icon. Its approved master is `Docs/Branding/fryday-icon-master.png`; `Scripts/render-icon.swift` packages it as an opaque 1024-pixel app icon. `Docs/AppIcon.svg` is an archived earlier concept.
 
 ## What changed
 

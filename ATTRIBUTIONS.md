@@ -4,4 +4,4 @@ Fry Day is an independent continuation of [Sun Day](https://github.com/jackjackb
 
 Weather data by [Open-Meteo](https://open-meteo.com/), licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Hourly forecast values are interpolated and integrated into estimated exposure totals. The API's service terms are separate from its data license.
 
-Fry Day's new app icon is original vector artwork created for this fork. The SF Symbols used in the interface are provided by Apple's system frameworks.
+Fry Day's frying-pan/sun-egg app icon is original AI-assisted artwork created for this fork. The SF Symbols used in the interface are provided by Apple's system frameworks.
