@@ -33,3 +33,5 @@ Physical-device energy profiling and travel/network-transition checks remain nec
 ## App Store upload correction — September 20, 2026
 
 Apple rejected the first upload with ITMS-90683 because the HealthKit entitlement/API reference requires `NSHealthUpdateUsageDescription`, even though authorization uses an empty write set. Added a truthful description stating that Fry Day does not write Health data. The authorization and UI are unchanged. Regenerated the project and successfully rebuilt the signed Release archive at `/private/tmp/FryDay-1.0.0-1-fixed.xcarchive`; verified the required key in the archived app. No new functional code was introduced.
+
+Apple upload and processing completed for 1.0.0 (1). App Store Connect confirms the Fry Day Internal group build status is Testing and its sole tester, the owner, is Invited. No external tester group or public release was enabled. The direct-install CoreDevice lock error remains separate from successful TestFlight availability.

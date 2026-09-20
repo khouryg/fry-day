@@ -66,3 +66,9 @@ App Store name acceptance is not a trademark clearance. A preliminary search fou
 The current free app has no advertising, subscriptions, paid features, or promotional commercial use. This matches Open-Meteo's stated non-commercial examples. Its free tier is limited to fewer than 10,000 calls per day, 5,000 per hour, 600 per minute, and the displayed monthly limit is 300,000. These are service limits, not a guaranteed allowance for each installed copy. Reassess service capacity before a large rollout or any monetization; never embed a paid service secret in the public client. Source: https://open-meteo.com/en/terms
 
 The weather source and CC BY 4.0 attribution appear in the app; widget and Live Activity UV labels name Open-Meteo. The methodology describes interpolation.
+
+## App Store Connect preparation — September 20, 2026
+
+Apple app ID: `6814111734`. Approved name, subtitle, Weather / Health & Fitness categories, version 1.0.0 description, keywords, support/marketing URLs, copyright, review notes, and manual release selection are saved. The public privacy policy URL is saved. The privacy questionnaire is prepared as precise location for App Functionality, not linked to identity, with no tracking; publication awaits the owner's approval of Apple's final attestation. No review contact, age rating, pricing/territory selection, or trader declaration has been invented.
+
+TestFlight internal group: `Fry Day Internal` (`50519082-fc5c-49df-a3dd-0bb96e09b94b`), with the owner as its only tester and automatic distribution disabled. The corrected 1.0.0 (1) upload succeeded and processing completed. Build ID: `5de4f643-2c53-4420-9454-5eb4d16aaad7`. The build is assigned to the internal group and What to Test instructions are saved. Group build status is `Testing`; owner tester status is `Invited` (September 20, 2026, 1:30 AM PDT). This does not establish physical installation or a completed device test.
