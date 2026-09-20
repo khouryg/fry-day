@@ -36,7 +36,7 @@
 	<key>NSHealthShareUsageDescription</key>
 	<string>Optionally read your age and skin type to personalize exposure estimates on this device.</string>
 	<key>NSHealthUpdateUsageDescription</key>
-	<string>Fry Day does not write Health data. Optional Health access only reads your profile to personalize estimates.</string>
+	<string>With your permission, Fry Day saves estimated vitamin D from sun exposure in Health’s dietary Vitamin D category, alongside food and supplement intake.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Fry Day uses your location to request the local UV forecast from Open-Meteo.</string>
 	<key>NSSupportsLiveActivities</key>

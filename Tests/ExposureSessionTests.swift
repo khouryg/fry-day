@@ -14,6 +14,35 @@ final class ExposureSessionTests: XCTestCase {
         ExposureSession(start: start, reminderDate: start.addingTimeInterval(1200), segments: [ExposureSegment(start: start, settings: settings, forecast: forecast())])
     }
 
+    func testWarningIntegratesConstantUV() {
+        let value = session()
+        let date = value.exposureWarningDate(now: start)!
+        XCTAssertEqual(date.timeIntervalSince(start), 425 * 60 / 5, accuracy: 1)
+    }
+    func testWarningMovesEarlierWithRisingUVWithoutResettingDose() {
+        var value = session()
+        let change = start.addingTimeInterval(1800)
+        value.segments.append(ExposureSegment(start: change, settings: ExposureSettings(), forecast: forecast(10)))
+        let date = value.exposureWarningDate(now: change)!
+        XCTAssertEqual(date.timeIntervalSince(start), 3450, accuracy: 1)
+    }
+    func testWarningMovesLaterWithFallingUV() {
+        var value = session()
+        let change = start.addingTimeInterval(1800)
+        value.segments.append(ExposureSegment(start: change, settings: ExposureSettings(), forecast: forecast(2)))
+        XCTAssertEqual(value.exposureWarningDate(now: change)!.timeIntervalSince(start), 10050, accuracy: 1)
+    }
+    func testWarningDoesNotExtrapolateOrWarnAfterEnd() {
+        var value = session()
+        value.segments[0].forecast = [UVSample(date: start, uv: 5), UVSample(date: start.addingTimeInterval(60), uv: 5)]
+        XCTAssertNil(value.exposureWarningDate(now: start))
+        value.end = start.addingTimeInterval(30)
+        XCTAssertNil(value.exposureWarningDate(now: start))
+    }
+    func testAlreadyExceededWarningIsImmediate() {
+        XCTAssertEqual(session().exposureWarningDate(now: start.addingTimeInterval(6000)), start.addingTimeInterval(6000))
+    }
+
     func testBackgroundIntervalCountsElapsedTimeForBothEstimates() {
         let value = session(), end = start.addingTimeInterval(1800)
         let totals = value.totals(until: end)

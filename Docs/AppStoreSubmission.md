@@ -21,14 +21,15 @@ See your local UV forecast, start an outdoor session, and keep its timer visible
 
 • Local UV forecasts with Home Screen widgets
 • Automatic Live Activities with an elapsed timer and End control
+• Best-effort exposure warnings based on your session and changing UV forecasts
 • Saved sessions with editable end times
 • Vitamin D estimates using your selected clothing, sunscreen, skin type, and optional age
-• Optional Apple Health import of available age and skin type
+• Optional Apple Health export of session estimates and import of available age and skin type
 • Local session history, without accounts, ads, or subscriptions
 
-Vitamin D values are modeled estimates from an inherited formula, not measurements or clinically validated predictions. Fry Day does not measure vitamin D status or tell you how long sun exposure is safe. Consult a healthcare professional for medical advice.
+Vitamin D values are modeled estimates from an inherited formula, not measurements or clinically validated predictions. Optional Health export saves sun-derived estimates in the dietary Vitamin D category, where Health may combine them with food and supplement intake. Fry Day does not measure vitamin D status or tell you how long sun exposure is safe. Exposure warnings use an inherited estimate and are not a guarantee against sunburn; forecasts and notification delivery may be delayed. Consult a healthcare professional for medical advice.
 
-Weather forecasts are provided by Open-Meteo. Actual widget and Live Activity updates depends on iOS settings and scheduling.
+Weather forecasts are provided by Open-Meteo. Actual widget and Live Activity updates depend on iOS settings and scheduling.
 
 Fry Day is a free, independent continuation of the open-source Sun Day app. Source code, methodology, and original-project attribution are available on GitHub.
 
@@ -47,7 +48,7 @@ Fry Day is an independent continuation of jackjackbits/sunday, released under th
 
 No login or purchase is required. Allow location to load UV forecasts. Begin is available when the local forecast UV is above zero; End remains available for a running session. To review the session feature, use a location and time with nonzero forecast UV. The clock and UV forecast are real rather than a fabricated review mode. How It Works is opened from the title/info control; session history and optional Health import are there.
 
-Health integration is optional and read-only (available age and skin type). Estimated skin synthesis is never written to Health's dietary vitamin D category. The owner chose to retain the inherited estimates for the first release and defer additional scientific validation. The model's limitations are disclosed in the app, methodology, and listing.
+Health integration is optional. Profile import reads available age and skin type. Separately opting into export requests dietary Vitamin D write permission and saves completed session estimates there. These sun-derived estimates may be combined with dietary intake in Health; the app discloses this and labels the source in metadata. Local saves do not depend on Health. The owner chose to retain the inherited estimates for the first release and defer additional scientific validation. The model's limitations are disclosed in the app, methodology, and listing.
 
 ## Export compliance
 
@@ -55,7 +56,7 @@ Fry Day uses Apple's URLSession/TLS for HTTPS and Apple's operating-system data 
 
 ## Privacy disclosure preparation
 
-The app sends coordinates to Open-Meteo for weather and uses Apple's geocoder for a place name. Open-Meteo's policy permits troubleshooting request logs retained for 90 days; do not claim that no location leaves the device. Session history and optional imported Health profile values remain on-device in a backup-excluded file. No tracking, ads, analytics SDK, advertising identifier, or app-operated account/backend is included. Verify App Store Connect answers against the bundled manifest and PRIVACY.md before publication.
+The app sends coordinates to Open-Meteo for weather and uses Apple's geocoder for a place name. Open-Meteo's policy permits troubleshooting request logs retained for 90 days; do not claim that no location leaves the device. Session history and optional imported Health profile values remain in a backup-excluded local file. If users enable export, session estimates and timestamps are also written to their Apple Health store and follow their Health synchronization and sharing settings. No tracking, ads, analytics SDK, advertising identifier, or app-operated account/backend is included. Verify App Store Connect answers against the bundled manifest and PRIVACY.md before publication.
 
 ## Remaining external checks
 
@@ -78,3 +79,9 @@ Build 2 removes notification scheduling and reminder controls at the owner's req
 TestFlight 1.0.0 (2) completed processing and shows Testing in Fry Day Internal. Build ID: `9776da65-1f2e-44cd-ad47-09122c4835a9`. Testing notes describe the single-page layout and automatic Live Activity without notifications.
 
 TestFlight 1.0.0 (3) restores the original Sun Day card proportions and moves added footer details into How It Works. Upload and processing completed, release notes are saved, and Testing status is verified in the existing Fry Day Internal group. Build ID: `7c96f4ae-3e59-4a4a-8fbf-4d12af2bdc38`. No public App Store submission was made.
+
+TestFlight 1.0.0 (4) completed processing and shows Testing in Fry Day Internal. Build ID: `9a88bb88-215b-4b5d-a0cb-832a44dc093e`. Notes explain the best-effort exposure warning, forecast changes, notification permissions, cancellation, and device checks. Draft App Store description and review notes were saved with these changes. No public review submission was made.
+
+## Build 5 Health export update
+
+The owner authorized optional export to dietary Vitamin D after build 4. Build 5 is now Testing in Fry Day Internal, with saved testing notes (build ID `b0d89f0e-dfd9-4878-b133-b588cfdc8e78`). The App Store description and review notes now disclose optional export and the dietary-category mismatch. Three approved screenshots are uploaded in home, Live Activity, history order. The age rating questionnaire calculates 16+ with regional and older-OS variations. Third-party content rights are declared based on the retained upstream license and attributed weather data. Privacy publication, free price setup, territories/trader information, medical-device declaration, physical checks, and public review submission remain.

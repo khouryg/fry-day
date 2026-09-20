@@ -46,6 +46,24 @@ struct ExposureSession: Codable, Identifiable, Equatable {
         UVSample.value(at: date, in: samples)
     }
 
+    // Best-effort threshold from the inherited skin-type model, not a safe-exposure limit.
+    // Never project beyond the available forecast or treat missing coverage as safe time.
+    func exposureWarningDate(now: Date) -> Date? {
+        guard end == nil, let horizon = segments.last?.forecast.last?.date,
+              horizon > now else { return nil }
+        let elapsed = totals(until: now)
+        guard elapsed.coveredSeconds >= max(0, now.timeIntervalSince(start)) - 1 else { return now }
+        if elapsed.med >= 1 { return now }
+        guard totals(until: horizon).med >= 1 else { return nil }
+        var low = now
+        var high = horizon
+        while high.timeIntervalSince(low) > 1 {
+            let middle = low.addingTimeInterval(high.timeIntervalSince(low) / 2)
+            if totals(until: middle).med >= 1 { high = middle } else { low = middle }
+        }
+        return high
+    }
+
     func totals(until requestedEnd: Date, since requestedStart: Date? = nil) -> ExposureTotals {
         let finish = min(end ?? requestedEnd, requestedEnd)
         let begin = max(start, requestedStart ?? start)

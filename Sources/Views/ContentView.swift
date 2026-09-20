@@ -714,8 +714,13 @@ struct InfoSheet: View {
                         if let status = sessions.liveActivityStatus {
                             Text(status).font(.caption).foregroundColor(.secondary)
                         }
+                        Text("Exposure warning").font(.headline)
+                        Text("When notifications are allowed, sessions schedule a best-effort warning using the inherited skin-type exposure estimate and changing UV forecast. It is not a measured burn limit or a guarantee against sunburn. Unreported exposure and individual sensitivity are not accounted for. Sunscreen does not extend the warning time. Unexpected conditions may not update while the app is suspended; iOS settings may delay or silence the alert. Use sun protection from the start.").font(.caption).foregroundColor(.secondary)
+                        if let status = sessions.exposureWarningStatus {
+                            Text(status).font(.caption).foregroundColor(.secondary)
+                        }
                         Text("Live Activity").font(.headline)
-                        Text("Starting a session automatically shows its timer on the Lock Screen and Dynamic Island when Live Activities are enabled. End opens the session completion screen. No notification is scheduled.").font(.caption).foregroundColor(.secondary)
+                        Text("Starting a session automatically shows its timer on the Lock Screen and Dynamic Island when Live Activities are enabled. End opens the session completion screen.").font(.caption).foregroundColor(.secondary)
                         if let updated = uvService.lastSuccessfulUpdate {
                             Text("Forecast updated \(updated.formatted(date: .abbreviated, time: .shortened))").font(.caption).foregroundColor(.secondary)
                         }
@@ -728,8 +733,12 @@ struct InfoSheet: View {
                     }
                     NavigationLink("Saved sessions") { SessionHistoryView() }
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("Optional Health profile").font(.headline)
-                        Text("Sessions save on this device. No vitamin D estimates are written to Health.").font(.caption).foregroundColor(.secondary)
+                        Text("Apple Health").font(.headline)
+                        Text("Optionally save sun-derived vitamin D estimates to Health’s dietary Vitamin D category. Health may combine them with food and supplement intake; they are estimates, not measured intake or blood levels.").font(.caption).foregroundColor(.secondary)
+                        Toggle("Export new sessions to Health", isOn: Binding(get: { health.exportEnabled }, set: { health.setExportEnabled($0) }))
+                            .disabled(health.requestingExport)
+                        Text("Sessions always save locally. Turning export off or deleting a local session does not delete Health entries; manage those in Health.").font(.caption).foregroundColor(.secondary)
+                        if let status = health.exportStatus { Text(status).font(.caption).foregroundColor(.secondary) }
                         Button("Use available age and skin type") {
                             health.loadProfile { age, skin in
                                 var settings = sessions.settings
@@ -763,15 +772,20 @@ struct InfoSheet: View {
 
 struct SessionHistoryView: View {
     @EnvironmentObject private var sessions: VitaminDCalculator
+    @EnvironmentObject private var health: HealthManager
     @State private var deleteID: UUID?
     var body: some View {
         List {
+            if let status = health.exportStatus { Text(status).font(.caption).foregroundStyle(.secondary) }
             if sessions.completed.isEmpty { ContentUnavailableView("No saved sessions", systemImage: "sun.horizon", description: Text("Completed sessions will appear here.")) }
             ForEach(sessions.completed) { session in
                 VStack(alignment: .leading, spacing: 6) {
                     Text(session.start.formatted(date: .abbreviated, time: .shortened)).font(.headline)
                     let end = session.end ?? session.start
                     Text("\(Int(end.timeIntervalSince(session.start) / 60)) min · \(session.totals(until: end).iu, specifier: "%.0f") IU estimated").foregroundStyle(.secondary)
+                    if health.exportEnabled {
+                        Button("Export estimate to Health") { health.export(session) }.font(.caption)
+                    }
                 }.swipeActions {
                     Button("Delete", role: .destructive) { deleteID = session.id }
                 }

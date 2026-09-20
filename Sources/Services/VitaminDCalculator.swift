@@ -19,6 +19,7 @@ final class VitaminDCalculator: ObservableObject {
     private var weatherUpdatedAt: Date?
     private var currentUV: Double?
     private let activity = SessionActivityController()
+    private let exposureWarning = ExposureWarningController()
     private let shared = UserDefaults(suiteName: "group.com.khouryg.fryday")
     private var lastWidgetUpdate = Date.distantPast
     private var widgetUpdate: Task<Void, Never>?
@@ -32,6 +33,7 @@ final class VitaminDCalculator: ObservableObject {
     private var historyContainsFutureEnd = false
     @Published private(set) var todayTotal = 0.0
 
+    var exposureWarningStatus: String? { exposureWarning.status }
     var liveActivityStatus: String? { activity.status }
     var active: ExposureSession? { archive.active }
     var isInSun: Bool { active != nil && active?.end == nil }
@@ -63,6 +65,7 @@ final class VitaminDCalculator: ObservableObject {
                 self?.refresh(forceWidget: true)
                 self?.startTimer()
                 self?.syncActivity(allowStart: false)
+                self?.exposureWarning.synchronize(session: self?.active)
             }
         })
         startTimer()
@@ -73,6 +76,7 @@ final class VitaminDCalculator: ObservableObject {
     func reload() {
         do {
             archive = try store.load()
+            exposureWarning.synchronize(session: active)
             historyDirty = true
             settings = archive.settings
             loaded = true
@@ -91,6 +95,7 @@ final class VitaminDCalculator: ObservableObject {
             try store.save(updated)
             if updated.completed != archive.completed { historyDirty = true }
             archive = updated
+            exposureWarning.synchronize(session: active)
             errorMessage = nil
             refresh(forceWidget: true)
             return true
@@ -112,6 +117,7 @@ final class VitaminDCalculator: ObservableObject {
         updated.active = ExposureSession(start: date, reminderDate: date, segments: [ExposureSegment(start: date, settings: settings, forecast: forecast)])
         guard commit(updated) else { return }
         syncActivity(allowStart: true)
+        exposureWarning.synchronize(session: active, requestPermission: true)
     }
 
     func prepareCompletion(sessionID: UUID? = nil) {
@@ -124,10 +130,11 @@ final class VitaminDCalculator: ObservableObject {
 
     @discardableResult
     func saveSession(end: Date) -> Bool {
-        guard active != nil else { return false }
+        guard let sessionID = active?.id else { return false }
         var updated = archive
         updated.complete(at: min(end, Date()))
         guard commit(updated) else { return false }
+        if let saved = archive.completed.first(where: { $0.id == sessionID }) { HealthManager.shared.export(saved) }
         syncActivity(allowStart: false)
         return true
     }
@@ -138,6 +145,7 @@ final class VitaminDCalculator: ObservableObject {
         updated.active?.end = nil
         guard commit(updated) else { return }
         syncActivity(allowStart: true)
+        exposureWarning.synchronize(session: active, requestPermission: true)
     }
 
     @discardableResult
@@ -165,7 +173,9 @@ final class VitaminDCalculator: ObservableObject {
         }
         var updated = archive
         updated.completed.append(session)
-        return commit(updated)
+        guard commit(updated) else { return false }
+        HealthManager.shared.export(session)
+        return true
     }
 
     func updateSettings(_ newSettings: ExposureSettings) {
