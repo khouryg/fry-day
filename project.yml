@@ -36,6 +36,7 @@ targets:
         UIRequiresFullScreen: true
         NSLocationWhenInUseUsageDescription: Fry Day uses your location to request the local UV forecast from Open-Meteo.
         NSHealthShareUsageDescription: Optionally read your age and skin type to personalize exposure estimates on this device.
+        NSHealthUpdateUsageDescription: Fry Day does not write Health data. Optional Health access only reads your profile to personalize estimates.
         NSSupportsLiveActivities: true
         ITSAppUsesNonExemptEncryption: false
         CFBundleURLTypes:
