@@ -9,9 +9,7 @@ final class VitaminDCalculator: ObservableObject {
     @Published private(set) var totals = ExposureTotals()
     @Published private(set) var currentVitaminDRate = 0.0
     @Published var errorMessage: String?
-    @Published var reminderStatus: String?
     @Published private(set) var settings = ExposureSettings()
-    @Published var reminderMinutes = 20
     @Published private(set) var now = Date()
     private var loaded = false
     private let store: SessionFileStore
@@ -21,7 +19,6 @@ final class VitaminDCalculator: ObservableObject {
     private var weatherUpdatedAt: Date?
     private var currentUV: Double?
     private let activity = SessionActivityController()
-    private let reminders = SessionReminderController()
     private let shared = UserDefaults(suiteName: "group.com.khouryg.fryday")
     private var lastWidgetUpdate = Date.distantPast
     private var widgetUpdate: Task<Void, Never>?
@@ -49,8 +46,7 @@ final class VitaminDCalculator: ObservableObject {
     init(store: SessionFileStore? = nil) {
         let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("FryDay", isDirectory: true)
         self.store = store ?? SessionFileStore(url: directory.appendingPathComponent("sessions.json"))
-        let savedMinutes = UserDefaults.standard.integer(forKey: "reminderMinutes")
-        if [10, 20, 30, 60].contains(savedMinutes) { reminderMinutes = savedMinutes }
+        removeLegacySessionNotifications()
         reload()
         observers.append(NotificationCenter.default.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in
@@ -72,7 +68,6 @@ final class VitaminDCalculator: ObservableObject {
         startTimer()
         // Reconcile orphan activities without recreating ones the user dismissed.
         syncActivity(allowStart: false)
-        reminders.synchronize(session: active, requestPermission: false) { [weak self] in self?.reminderStatus = $0 }
     }
 
     func reload() {
@@ -114,11 +109,9 @@ final class VitaminDCalculator: ObservableObject {
         }
         let date = Date()
         var updated = archive
-        updated.active = ExposureSession(start: date, reminderDate: date.addingTimeInterval(Double(reminderMinutes) * 60), segments: [ExposureSegment(start: date, settings: settings, forecast: forecast)])
+        updated.active = ExposureSession(start: date, reminderDate: date, segments: [ExposureSegment(start: date, settings: settings, forecast: forecast)])
         guard commit(updated) else { return }
-        UserDefaults.standard.set(reminderMinutes, forKey: "reminderMinutes")
         syncActivity(allowStart: true)
-        reminders.synchronize(session: active, requestPermission: true) { [weak self] in self?.reminderStatus = $0 }
     }
 
     func prepareCompletion(sessionID: UUID? = nil) {
@@ -127,7 +120,6 @@ final class VitaminDCalculator: ObservableObject {
         updated.active?.end = Date()
         guard commit(updated) else { return }
         syncActivity(allowStart: false)
-        reminders.synchronize(session: nil, requestPermission: false) { _ in }
     }
 
     @discardableResult
@@ -137,7 +129,6 @@ final class VitaminDCalculator: ObservableObject {
         updated.complete(at: min(end, Date()))
         guard commit(updated) else { return false }
         syncActivity(allowStart: false)
-        reminders.synchronize(session: nil, requestPermission: false) { _ in }
         return true
     }
 
@@ -145,10 +136,8 @@ final class VitaminDCalculator: ObservableObject {
         guard active != nil else { return }
         var updated = archive
         updated.active?.end = nil
-        updated.active?.reminderDate = Date().addingTimeInterval(Double(reminderMinutes) * 60)
         guard commit(updated) else { return }
         syncActivity(allowStart: true)
-        reminders.synchronize(session: active, requestPermission: true) { [weak self] in self?.reminderStatus = $0 }
     }
 
     @discardableResult
@@ -157,7 +146,6 @@ final class VitaminDCalculator: ObservableObject {
         updated.active = nil
         guard commit(updated) else { return false }
         syncActivity(allowStart: false)
-        reminders.synchronize(session: nil, requestPermission: false) { _ in }
         return true
     }
 

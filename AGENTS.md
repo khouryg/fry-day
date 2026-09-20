@@ -9,3 +9,5 @@
 - Release decision (September 20, 2026): retain the inherited vitamin D estimates for the first release, keep their limitations explicit, and defer further scientific validation. Do not remove the estimates or hold the entire beta workflow for that review. Do not describe the model as clinically validated.
 
 - Approved App Store listing name: `Fry Day: Sun & UV Timer`. Keep the installed display name `Fry Day`. Apple rejected the unqualified listing name as already in use.
+
+- Keep the home screen on one page with no scrolling. No session notification/reminder controls: rely on the automatic Live Activity when a session starts. Existing information and history sheets may scroll.

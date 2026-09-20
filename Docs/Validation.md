@@ -35,3 +35,11 @@ Physical-device energy profiling and travel/network-transition checks remain nec
 Apple rejected the first upload with ITMS-90683 because the HealthKit entitlement/API reference requires `NSHealthUpdateUsageDescription`, even though authorization uses an empty write set. Added a truthful description stating that Fry Day does not write Health data. The authorization and UI are unchanged. Regenerated the project and successfully rebuilt the signed Release archive at `/private/tmp/FryDay-1.0.0-1-fixed.xcarchive`; verified the required key in the archived app. No new functional code was introduced.
 
 Apple upload and processing completed for 1.0.0 (1). App Store Connect confirms the Fry Day Internal group build status is Testing and its sole tester, the owner, is Invited. No external tester group or public release was enabled. The direct-install CoreDevice lock error remains separate from successful TestFlight availability.
+
+## Build 2 — single-page home and Live Activity only
+
+Removed the main ScrollView and redundant reminder controls. The original cards and gradients remain, with normal/compact spacing selected for available height. Forecast timestamps and the Live Activity explanation are available in How It Works. Removed all notification scheduling and permission requests; launch cancels legacy notification identifiers from build 1. Persisted reminderDate fields remain for decoding existing session/activity records only.
+
+Validation: all 34 iOS tests passed. Simulator visual checks confirmed the complete home screen on iPhone 17 Pro / iOS 26.2 and iPhone SE (3rd generation) / iOS 18.5, including the denied-location and seasonal-warning state on SE. Signed Release archive succeeded with app and widget both 1.0.0 (2). Physical-device confirmation of this layout remains for the owner to perform in TestFlight.
+
+Build 2 upload and processing completed. App Store Connect shows 1.0.0 (2) as Testing in Fry Day Internal. Build ID: `9776da65-1f2e-44cd-ad47-09122c4835a9`.

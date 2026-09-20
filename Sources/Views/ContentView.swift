@@ -18,34 +18,14 @@ struct ContentView: View {
     var body: some View {
         ZStack {
             LinearGradient(colors: gradientColors, startPoint: .topLeading, endPoint: .bottomTrailing).ignoresSafeArea()
-            ScrollView {
-                VStack(spacing: 20) {
-                    headerSection
-                    uvSection
-                    vitaminDSection
-                    exposureToggle
-                    HStack(spacing: 12) { clothingSection; sunscreenSection }
-                    skinTypeSection
-                    reminderRow
-                    if let status = vitaminDCalculator.reminderStatus ?? vitaminDCalculator.liveActivityStatus {
-                        Text(status).font(.caption).foregroundColor(.white.opacity(0.8)).multilineTextAlignment(.center)
-                    }
-                    if vitaminDCalculator.hasIncompleteCoverage {
-                        Text("Missing UV intervals are excluded from this estimate.").font(.caption).foregroundColor(.white.opacity(0.8))
-                    }
-                    Text("Vitamin D values are estimates.").font(.caption2).foregroundColor(.white.opacity(0.7))
-                    if let updated = uvService.lastSuccessfulUpdate {
-                        Text("\(uvService.isOfflineMode ? "Cached forecast" : "Forecast") · \(updated.formatted(date: .omitted, time: .shortened))")
-                            .font(.caption2).foregroundColor(.white.opacity(0.7))
-                    }
-                    if let error = uvService.lastError {
-                        Button("Refresh UV data") { refreshWeather(force: true) }.font(.caption).tint(.white).accessibilityHint(error)
-                    }
-                    Link("Weather by Open-Meteo · CC BY 4.0", destination: URL(string: "https://open-meteo.com/")!)
-                        .font(.caption2).foregroundColor(.white.opacity(0.7))
-                }.padding(.horizontal, 20).padding(.vertical, 20)
+            ViewThatFits(in: .vertical) {
+                dashboard(compact: false)
+                dashboard(compact: true)
             }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 8)
         }
+
         .sheet(isPresented: $showInfoSheet) { InfoSheet() }
         .sheet(isPresented: $showManualExposureSheet) { ManualExposureSheet() }
         .sheet(isPresented: Binding(get: { vitaminDCalculator.active?.end != nil }, set: { _ in })) {
@@ -89,19 +69,30 @@ struct ContentView: View {
     private func refreshWeather(force: Bool = false) {
         if let location = locationManager.location { uvService.fetchUVData(for: location, force: force, isTracking: vitaminDCalculator.isInSun) }
     }
-    private var reminderRow: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "bell")
-            if let session = vitaminDCalculator.active {
-                Text(session.reminderDate > vitaminDCalculator.now ? "Check in at \(session.reminderDate.formatted(date: .omitted, time: .shortened))" : "Time to check in. Still outdoors?")
-            } else {
-                Menu {
-                    Picker("Remind me after", selection: $vitaminDCalculator.reminderMinutes) {
-                        ForEach([10, 20, 30, 60], id: \.self) { Text("\($0) minutes").tag($0) }
-                    }
-                } label: { Text("Remind me after \(vitaminDCalculator.reminderMinutes) min"); Image(systemName: "chevron.down") }
+    // The home screen always fits one page; detailed explanations remain in How It Works.
+    private func dashboard(compact: Bool) -> some View {
+        VStack(spacing: compact ? 6 : 12) {
+            headerSection(compact: compact)
+            uvSection(compact: compact)
+            vitaminDSection(compact: compact)
+            exposureToggle
+            HStack(spacing: 12) { clothingSection; sunscreenSection }
+            skinTypeSection
+            VStack(spacing: 3) {
+                Button { showInfoSheet = true } label: {
+                    Text(vitaminDCalculator.hasIncompleteCoverage ? "Estimate excludes missing UV · Details" : "Vitamin D values are estimates · Details")
+                }
+                if let status = vitaminDCalculator.liveActivityStatus {
+                    Text(status).lineLimit(2)
+                }
+                if let error = uvService.lastError {
+                    Button("Refresh UV data") { refreshWeather(force: true) }.accessibilityHint(error)
+                }
+                Link("Weather by Open-Meteo · CC BY 4.0", destination: URL(string: "https://open-meteo.com/")!)
             }
-        }.font(.caption).foregroundColor(.white.opacity(0.8))
+            .font(.caption2).foregroundStyle(.white.opacity(0.7))
+            .multilineTextAlignment(.center)
+        }
     }
     private var exposureToggle: some View {
         HStack(spacing: 12) {
@@ -114,14 +105,14 @@ struct ContentView: View {
                         .font(.system(size: 24)).symbolEffect(.pulse, isActive: vitaminDCalculator.isInSun)
                     Text(vitaminDCalculator.isInSun ? "End" : displayedUV == 0 ? "No UV available" : "Begin")
                         .font(.system(size: 18, weight: .semibold))
-                }.foregroundColor(.white).frame(maxWidth: .infinity).padding(.vertical, 20)
+                }.foregroundColor(.white).frame(maxWidth: .infinity).padding(.vertical, 12)
                     .background(vitaminDCalculator.isInSun ? Color.yellow.opacity(0.3) : Color.black.opacity(0.2)).cornerRadius(15)
             }
             .disabled(displayedUV == 0 && !vitaminDCalculator.isInSun)
             .opacity(displayedUV == 0 && !vitaminDCalculator.isInSun ? 0.6 : 1)
             Button { showManualExposureSheet = true } label: {
                 Image(systemName: "clock.arrow.circlepath").font(.system(size: 24)).foregroundColor(.white)
-                    .frame(width: 60).padding(.vertical, 20).background(Color.black.opacity(0.2)).cornerRadius(15)
+                    .frame(width: 60).padding(.vertical, 12).background(Color.black.opacity(0.2)).cornerRadius(15)
             }.accessibilityLabel("Log past exposure").disabled(vitaminDCalculator.active != nil).opacity(vitaminDCalculator.active != nil ? 0.4 : 1)
         }
     }
@@ -173,17 +164,17 @@ struct ContentView: View {
         }
     }
     
-    private var headerSection: some View {
+    private func headerSection(compact: Bool) -> some View {
         Button(action: { showInfoSheet = true }) {
             Text("FRY DAY")
-                .font(.system(size: 40, weight: .bold, design: .rounded))
+                .font(.system(size: compact ? 28 : 36, weight: .bold, design: .rounded))
                 .foregroundColor(.white)
                 .tracking(2)
         }
     }
     
-    private var uvSection: some View {
-        VStack(spacing: 8) {
+    private func uvSection(compact: Bool) -> some View {
+        VStack(spacing: compact ? 4 : 8) {
             if locationManager.authorizationStatus == .denied || locationManager.authorizationStatus == .restricted {
                 VStack(spacing: 10) {
                     Image(systemName: "location.slash")
@@ -212,23 +203,11 @@ struct ContentView: View {
                     .tracking(1.5)
                 
                 Text(uvService.currentUV.map { String(format: "%.1f", $0) } ?? "—")
-                    .font(.system(size: 72, weight: .bold, design: .rounded))
+                    .font(.system(size: compact ? 44 : 64, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
             }
             
             HStack(spacing: 15) {
-                VStack(spacing: 3) {
-                    Text("CHECK-IN")
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundColor(.white.opacity(0.6))
-                    Text("\(vitaminDCalculator.reminderMinutes) min")
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundColor(.white)
-                    Text(" ")
-                        .font(.system(size: 8, weight: .medium))
-                        .opacity(0)
-                }
-                
                 VStack(spacing: 3) {
                     Text(uvService.shouldShowTomorrowTimes ? "MAX TMRW" : "MAX UVI")
                         .font(.system(size: 9, weight: .medium))
@@ -344,7 +323,7 @@ struct ContentView: View {
                 .padding(.top, 8)
             }
         }
-        .padding(.vertical, 20)
+        .padding(.vertical, compact ? 6 : 14)
         .frame(maxWidth: .infinity)
         .background(Color.black.opacity(0.2))
         .cornerRadius(20)
@@ -352,7 +331,7 @@ struct ContentView: View {
     
     private var clothingSection: some View {
         Button(action: { showClothingPicker.toggle() }) {
-            VStack(spacing: 10) {
+            VStack(spacing: 6) {
                 Text("CLOTHING")
                     .font(.system(size: 10, weight: .bold))
                     .foregroundColor(.white.opacity(0.7))
@@ -368,7 +347,7 @@ struct ContentView: View {
                 .foregroundColor(.white)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 15)
+            .padding(.vertical, 10)
             .background(Color.black.opacity(0.2))
             .cornerRadius(15)
         }
@@ -381,7 +360,7 @@ struct ContentView: View {
     
     private var sunscreenSection: some View {
         Button(action: { showSunscreenPicker.toggle() }) {
-            VStack(spacing: 10) {
+            VStack(spacing: 6) {
                 Text("SUNSCREEN")
                     .font(.system(size: 10, weight: .bold))
                     .foregroundColor(.white.opacity(0.7))
@@ -397,7 +376,7 @@ struct ContentView: View {
                 .foregroundColor(.white)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 15)
+            .padding(.vertical, 10)
             .background(Color.black.opacity(0.2))
             .cornerRadius(15)
         }
@@ -410,7 +389,7 @@ struct ContentView: View {
     
     private var skinTypeSection: some View {
         Button(action: { showSkinTypePicker.toggle() }) {
-            VStack(spacing: 10) {
+            VStack(spacing: 6) {
                 Text("SKIN TYPE")
                     .font(.system(size: 10, weight: .bold))
                     .foregroundColor(.white.opacity(0.7))
@@ -426,7 +405,7 @@ struct ContentView: View {
                 .foregroundColor(.white)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 15)
+            .padding(.vertical, 10)
             .background(Color.black.opacity(0.2))
             .cornerRadius(15)
         }
@@ -435,7 +414,7 @@ struct ContentView: View {
         }
     }
 
-    private var vitaminDSection: some View {
+    private func vitaminDSection(compact: Bool) -> some View {
         VStack(spacing: 15) {
             HStack(alignment: .top, spacing: 15) {
                 VStack(spacing: 8) {
@@ -527,7 +506,7 @@ struct ContentView: View {
                 .frame(minWidth: 100)
             }
         }
-        .padding(.vertical, 20)
+        .padding(.vertical, compact ? 6 : 14)
         .frame(maxWidth: .infinity)
         .background(Color.black.opacity(0.2))
         .cornerRadius(20)
@@ -726,6 +705,7 @@ struct InfoSheet: View {
     @Environment(\.dismiss) var dismiss
     @EnvironmentObject private var sessions: VitaminDCalculator
     @EnvironmentObject private var health: HealthManager
+    @EnvironmentObject private var uvService: UVService
     var body: some View {
         NavigationView {
             ScrollView {
@@ -733,8 +713,15 @@ struct InfoSheet: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("About").font(.headline)
                         Text("Fry Day estimates vitamin D from UV forecasts, clothing, sunscreen, skin type, and optional age. The inherited model has not been clinically validated.").font(.caption).foregroundColor(.secondary)
-                        Text("Estimates are not measurements or safe-exposure limits. Check with a clinician before making medical decisions. Reminders are check-ins, not burn predictions.").font(.caption).foregroundColor(.secondary)
+                        Text("Estimates are not measurements or safe-exposure limits. Check with a clinician before making medical decisions.").font(.caption).foregroundColor(.secondary)
                         Link("View detailed methodology", destination: URL(string: "https://github.com/khouryg/fry-day/blob/main/METHODOLOGY.md")!).font(.caption)
+                    }
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Live Activity").font(.headline)
+                        Text("Starting a session automatically shows its timer on the Lock Screen and Dynamic Island when Live Activities are enabled. End opens the session completion screen. No notification is scheduled.").font(.caption).foregroundColor(.secondary)
+                        if let updated = uvService.lastSuccessfulUpdate {
+                            Text("Forecast updated \(updated.formatted(date: .abbreviated, time: .shortened))").font(.caption).foregroundColor(.secondary)
+                        }
                     }
                     NavigationLink("Saved sessions") { SessionHistoryView() }
                     VStack(alignment: .leading, spacing: 10) {

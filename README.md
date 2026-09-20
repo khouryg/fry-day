@@ -2,7 +2,7 @@
 
 An independent, free continuation of [Sun Day](https://github.com/jackjackbits/sunday), originally released by jackjackbits and contributors under the [Unlicense](LICENSE).
 
-Fry Day helps you remember an outdoor sun session with a Lock Screen / Dynamic Island Live Activity and a local check-in reminder. Sessions and editable end times are saved on-device. The app also shows timestamped UV forecasts and optional modeled vitamin D estimates.
+Fry Day helps you remember an outdoor sun session with a Lock Screen / Dynamic Island Live Activity. Sessions and editable end times are saved on-device. The app also shows timestamped UV forecasts and optional modeled vitamin D estimates.
 
 ## Build
 
@@ -25,16 +25,16 @@ The Swift package runs deterministic exposure/persistence regression tests on ma
 ## What changed
 
 - Persistent sessions survive suspension, termination, and midnight; completed history is independent of Health permissions. Incremental in-memory calculations preserve the original estimates while avoiding repeated processing of elapsed exposure.
-- Live Activity elapsed timer and End link; a scheduled check-in reminder works while the app is suspended.
+- Live Activity elapsed timer and End link; no notification permission is required.
 - Corrected end times recalculate the interval. UV forecast gaps are excluded instead of filled with invented values.
 - Timestamped weather requests, bounded cache, explicit offline state, and no moon-service dependency. Fresh forecasts are reused across launches; automatic requests run about every five minutes during an active session or ten minutes while idle, with exponential failure backoff and connectivity recovery.
 - The original widget advances UV from forecast timelines every 15 minutes; network refreshes are throttled to roughly three hours, with retry throttling and explicit forecast age.
 - No synthesized vitamin D is written into Health's dietary intake category. Optional Health access reads age and skin type only.
-- Original simple UI and time-of-day gradients retained, with Fry Day branding, a compact reminder control, and accurate save/estimate wording.
+- Original simple UI and time-of-day gradients retained, with Fry Day branding, a home screen that fits without scrolling, and accurate save/estimate wording.
 - Bundled icon/launch resources, privacy manifests, and privacy/support links.
 
 ## Estimates and privacy
 
-The inherited exposure formula is **not clinically validated** and does not measure vitamin D production or a safe exposure duration. See [methodology](METHODOLOGY.md). Session reminders are user-selected check-ins, not burn predictions.
+The inherited exposure formula is **not clinically validated** and does not measure vitamin D production or a safe exposure duration. See [methodology](METHODOLOGY.md).
 
 See the [privacy policy](PRIVACY.md), [attributions](ATTRIBUTIONS.md), and [release checklist](Docs/ReleaseReadiness.md). No analytics, advertising, accounts, or app-operated backend is included.

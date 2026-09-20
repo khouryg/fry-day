@@ -444,7 +444,6 @@ struct SunSessionLiveActivity: Widget {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Sun session running").font(.subheadline)
-                        Text("Check in at \(context.state.reminderDate.formatted(date: .omitted, time: .shortened))").font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
                     Link(destination: endURL(context.attributes)) {
@@ -463,7 +462,6 @@ struct SunSessionLiveActivity: Widget {
                 DynamicIslandExpandedRegion(.trailing) { Text(context.attributes.startedAt, style: .timer).monospacedDigit() }
                 DynamicIslandExpandedRegion(.bottom) {
                     HStack {
-                        Text("Check in at \(context.state.reminderDate.formatted(date: .omitted, time: .shortened))").font(.caption)
                         Spacer()
                         Link("End session", destination: endURL(context.attributes)).foregroundStyle(.orange)
                     }
