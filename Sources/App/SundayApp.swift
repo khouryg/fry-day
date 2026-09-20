@@ -1,52 +1,31 @@
 import SwiftUI
-import SwiftData
+import UserNotifications
+
+final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        UNUserNotificationCenter.current().delegate = self
+        return true
+    }
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
+        [.banner, .sound]
+    }
+}
 
 @main
-struct SundayApp: App {
-    @StateObject private var locationManager = LocationManager()
-    @StateObject private var healthManager = HealthManager()
-    @StateObject private var uvService = UVService()
-    @StateObject private var vitaminDCalculator = VitaminDCalculator()
-    @StateObject private var networkMonitor = NetworkMonitor()
-    
-    let modelContainer: ModelContainer
-    
-    init() {
-        do {
-            // Configure ModelContainer with proper storage location
-            let schema = Schema([
-                UserPreferences.self,
-                VitaminDSession.self,
-                CachedUVData.self
-            ])
-            
-            let modelConfiguration = ModelConfiguration(
-                schema: schema,
-                isStoredInMemoryOnly: false,
-                allowsSave: true
-            )
-            
-            modelContainer = try ModelContainer(
-                for: schema,
-                configurations: [modelConfiguration]
-            )
-            
-            // Perform migration from UserDefaults to SwiftData
-            MigrationService.migrateUserDefaults(to: modelContainer.mainContext)
-        } catch {
-            fatalError("Failed to create ModelContainer: \(error)")
-        }
-    }
-    
+struct FryDayApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
+    @StateObject private var location = LocationManager()
+    @StateObject private var health = HealthManager()
+    @StateObject private var weather = UVService()
+    @StateObject private var sessions = VitaminDCalculator()
+
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .environmentObject(locationManager)
-                .environmentObject(healthManager)
-                .environmentObject(uvService)
-                .environmentObject(vitaminDCalculator)
-                .environmentObject(networkMonitor)
-                .modelContainer(modelContainer)
+                .environmentObject(location)
+                .environmentObject(health)
+                .environmentObject(weather)
+                .environmentObject(sessions)
         }
     }
 }

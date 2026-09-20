@@ -1,6 +1,6 @@
 import WidgetKit
 import SwiftUI
-import Intents
+import ActivityKit
 import Foundation
 
 // Shared number formatter for widget
@@ -11,79 +11,34 @@ private let sharedNumberFormatter: NumberFormatter = {
     return formatter
 }()
 
-struct Provider: IntentTimelineProvider {
-    func placeholder(in context: Context) -> SimpleEntry {
-        SimpleEntry(date: Date(), uvIndex: 5.0, todaysTotal: 2500, isTracking: false, vitaminDRate: 350, locationName: "Rome", moonPhaseName: "Full Moon", altitude: 100, uvMultiplier: 1.01, cloudCover: 20.0, configuration: ConfigurationIntent())
+struct Provider: TimelineProvider {
+    func placeholder(in context: Context) -> SimpleEntry { makeEntry(at: Date(), forecast: nil) }
+    func getSnapshot(in context: Context, completion: @escaping (SimpleEntry) -> Void) {
+        Task { completion(makeEntry(at: Date(), forecast: await WidgetForecastLoader.shared.cached())) }
     }
-
-    func getSnapshot(for configuration: ConfigurationIntent, in context: Context, completion: @escaping (SimpleEntry) -> ()) {
-        let entry = SimpleEntry(date: Date(), uvIndex: 5.0, todaysTotal: 2500, isTracking: false, vitaminDRate: 350, locationName: "Rome", moonPhaseName: "Full Moon", altitude: 100, uvMultiplier: 1.01, cloudCover: 20.0, configuration: configuration)
-        completion(entry)
+    func getTimeline(in context: Context, completion: @escaping (Timeline<SimpleEntry>) -> Void) {
+        Task {
+            let forecast = await WidgetForecastLoader.shared.forecast()
+            let now = Date()
+            let entries = ForecastRefreshPolicy.timelineDates(from: now).map { makeEntry(at: $0, forecast: forecast) }
+            // iOS controls delivery. Existing entries remain useful if the refresh is delayed.
+            let refresh = now.addingTimeInterval(ForecastRefreshPolicy.refreshInterval + Double.random(in: 0...300))
+            completion(Timeline(entries: entries, policy: .after(refresh)))
+        }
     }
-
-    func getTimeline(for configuration: ConfigurationIntent, in context: Context, completion: @escaping (Timeline<Entry>) -> ()) {
-        var entries: [SimpleEntry] = []
-        
-        // Read from shared UserDefaults
-        let sharedDefaults = UserDefaults(suiteName: "group.sunday.widget")
-        let uvIndex = sharedDefaults?.double(forKey: "currentUV") ?? 0.0
-        let todaysTotal = sharedDefaults?.double(forKey: "todaysTotal") ?? 0.0
-        let isTracking = sharedDefaults?.bool(forKey: "isTracking") ?? false
-        let vitaminDRate = sharedDefaults?.double(forKey: "vitaminDRate") ?? 0.0
-        let locationName = sharedDefaults?.string(forKey: "locationName") ?? ""
-        var moonPhaseName = sharedDefaults?.string(forKey: "moonPhaseName") ?? ""
-        let altitude = sharedDefaults?.double(forKey: "currentAltitude") ?? 0.0
-        let uvMultiplier = sharedDefaults?.double(forKey: "uvMultiplier") ?? 1.0
-        let cloudCover = sharedDefaults?.double(forKey: "currentCloudCover") ?? 0.0
-        
-        // Provide default if empty
-        if moonPhaseName.isEmpty {
-            moonPhaseName = "Waxing Gibbous"
-        }
-
-        // Generate timeline entries at key times when gradient changes
-        let currentDate = Date()
-        let calendar = Calendar.current
-        
-        // Create entries at gradient transition times
-        var entryDates: [Date] = [currentDate]
-        
-        // Add entries for the next gradient transitions
-        let gradientTransitionHours = [5.0, 6.0, 6.5, 7.0, 8.0, 10.0, 16.0, 17.0, 18.5, 19.5, 20.5, 22.0]
-        
-        for transitionHour in gradientTransitionHours {
-            let transitionComponents = DateComponents(hour: Int(transitionHour), minute: Int((transitionHour.truncatingRemainder(dividingBy: 1)) * 60))
-            if let transitionDate = calendar.nextDate(after: currentDate, matching: transitionComponents, matchingPolicy: .nextTime) {
-                if transitionDate.timeIntervalSince(currentDate) < 24 * 60 * 60 { // Within 24 hours
-                    entryDates.append(transitionDate)
-                }
-            }
-        }
-        
-        // Sort and limit to reasonable number of entries
-        entryDates.sort()
-        entryDates = Array(entryDates.prefix(8))
-        
-        // Create entries
-        for entryDate in entryDates {
-            let entry = SimpleEntry(date: entryDate, uvIndex: uvIndex, todaysTotal: todaysTotal, isTracking: isTracking, vitaminDRate: vitaminDRate, locationName: locationName, moonPhaseName: moonPhaseName, altitude: altitude, uvMultiplier: uvMultiplier, cloudCover: cloudCover, configuration: configuration)
-            entries.append(entry)
-        }
-
-        // Update more frequently when tracking, less frequently when not
-        let updatePolicy: TimelineReloadPolicy
-        if isTracking {
-            // Update every minute when actively tracking
-            let nextUpdate = Calendar.current.date(byAdding: .minute, value: 1, to: currentDate)!
-            updatePolicy = .after(nextUpdate)
-        } else {
-            // Update every 15 minutes when not tracking
-            let nextUpdate = Calendar.current.date(byAdding: .minute, value: 15, to: currentDate)!
-            updatePolicy = .after(nextUpdate)
-        }
-        
-        let timeline = Timeline(entries: entries, policy: updatePolicy)
-        completion(timeline)
+    private func makeEntry(at date: Date, forecast: WeatherSnapshot?) -> SimpleEntry {
+        let shared = UserDefaults(suiteName: "group.com.khouryg.fryday")
+        let totalsDate = shared?.object(forKey: "totalsUpdatedAt") as? Date
+        let today = totalsDate.map { Calendar.current.isDate($0, inSameDayAs: date) } ?? false
+        let uv = forecast.flatMap { ForecastRefreshPolicy.uv(at: date, snapshot: $0) }
+        return SimpleEntry(date: date, uvIndex: uv ?? 0,
+            todaysTotal: today ? shared?.double(forKey: "todaysTotal") ?? 0 : 0,
+            isTracking: shared?.bool(forKey: "isTracking") ?? false,
+            vitaminDRate: 0,
+            locationName: shared?.string(forKey: "locationName") ?? "",
+            moonPhaseName: shared?.string(forKey: "moonPhaseName") ?? "", altitude: forecast?.altitude ?? 0,
+            uvMultiplier: 1, cloudCover: forecast?.cloudCover ?? 0,
+            isStale: uv == nil, sessionID: shared?.string(forKey: "sessionID"), forecastUpdatedAt: forecast?.updatedAt)
     }
 }
 
@@ -98,7 +53,9 @@ struct SimpleEntry: TimelineEntry {
     let altitude: Double
     let uvMultiplier: Double
     let cloudCover: Double
-    let configuration: ConfigurationIntent
+    var isStale: Bool = false
+    var sessionID: String? = nil
+    var forecastUpdatedAt: Date? = nil
 }
 
 struct SundayWidgetEntryView : View {
@@ -126,10 +83,10 @@ struct SmallWidgetView: View {
             VStack(spacing: 8) {
                 // UV Index
                 VStack(spacing: 2) {
-                    Text("UV")
+                    Text("UV · Open-Meteo")
                         .font(.system(size: 10, weight: .medium))
                         .foregroundColor(.white.opacity(0.7))
-                    Text(String(format: "%.1f", entry.uvIndex))
+                    Text(entry.isStale ? "—" : String(format: "%.1f", entry.uvIndex))
                         .font(.system(size: 28, weight: .bold))
                         .foregroundColor(.white)
                 }
@@ -142,7 +99,7 @@ struct SmallWidgetView: View {
                     Text(formatNumber(entry.todaysTotal))
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.white)
-                    Text("IU")
+                    Text("IU est.")
                         .font(.system(size: 10))
                         .foregroundColor(.white.opacity(0.7))
                 }
@@ -183,8 +140,8 @@ struct SmallWidgetView: View {
     }
     
     var gradientColors: [Color] {
-        let hour = Calendar.current.component(.hour, from: Date())
-        let minute = Calendar.current.component(.minute, from: Date())
+        let hour = Calendar.current.component(.hour, from: entry.date)
+        let minute = Calendar.current.component(.minute, from: entry.date)
         let timeProgress = Double(hour) + Double(minute) / 60.0
         
         if timeProgress < 5 || timeProgress > 22 {
@@ -228,10 +185,10 @@ struct MediumWidgetView: View {
                     HStack(alignment: .top, spacing: 16) {
                         // UV Index section
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("UV INDEX")
+                            Text("UV · Open-Meteo")
                                 .font(.system(size: 10, weight: .medium))
                                 .foregroundColor(.white.opacity(0.7))
-                            Text(String(format: "%.1f", entry.uvIndex))
+                            Text(entry.isStale ? "—" : String(format: "%.1f", entry.uvIndex))
                                 .font(.system(size: 48, weight: .bold))
                                 .foregroundColor(.white)
                         }
@@ -246,25 +203,16 @@ struct MediumWidgetView: View {
                                     Text(formatNumber(entry.todaysTotal))
                                         .font(.system(size: 18, weight: .semibold))
                                         .foregroundColor(.white)
-                                    Text("IU")
+                                    Text("IU est.")
                                         .font(.system(size: 11))
                                         .foregroundColor(.white.opacity(0.8))
                                 }
                             }
                             
-                            if entry.uvIndex > 0 {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(entry.isTracking ? "RATE" : "POTENTIAL")
-                                        .font(.system(size: 10, weight: .medium))
-                                        .foregroundColor(.white.opacity(0.7))
-                                    HStack(spacing: 2) {
-                                        Text("\(Int(entry.vitaminDRate / 60))")
-                                            .font(.system(size: 18, weight: .semibold))
-                                            .foregroundColor(.white)
-                                        Text("IU/min")
-                                            .font(.system(size: 11))
-                                            .foregroundColor(.white.opacity(0.8))
-                                    }
+                            if let updated = entry.forecastUpdatedAt {
+                                VStack(spacing: 3) {
+                                    Text("FORECAST").font(.system(size: 10, weight: .bold)).foregroundColor(.white.opacity(0.6))
+                                    Text(updated, style: .time).font(.system(size: 14, weight: .medium)).foregroundColor(.white.opacity(0.8))
                                 }
                             }
                         }
@@ -273,13 +221,13 @@ struct MediumWidgetView: View {
                     Spacer()
                     
                     // Right side: Button/Moon icon at top
-                    if entry.uvIndex > 0 {
-                        Link(destination: URL(string: "sunday://toggle")!) {
+                    if entry.uvIndex > 0 || entry.isTracking {
+                        Link(destination: URL(string: entry.isTracking ? "fryday://end?session=\(entry.sessionID ?? "")" : "fryday://session")!) {
                             VStack(spacing: 4) {
                                 Image(systemName: entry.isTracking ? "stop.circle.fill" : "sun.max.circle.fill")
                                     .font(.system(size: 44))
                                     .foregroundColor(.white)
-                                Text(entry.isTracking ? "End" : "Begin")
+                                Text(entry.isTracking ? "End" : "Open")
                                     .font(.system(size: 12, weight: .medium))
                                     .foregroundColor(.white.opacity(0.8))
                             }
@@ -291,7 +239,7 @@ struct MediumWidgetView: View {
                                 .font(.system(size: 44))
                                 .foregroundColor(.white.opacity(0.8))
                                 .symbolRenderingMode(.hierarchical)
-                            Text("Night")
+                            Text(entry.isStale ? "Refresh UV" : "Night")
                                 .font(.system(size: 12, weight: .medium))
                                 .foregroundColor(.white.opacity(0.6))
                         }
@@ -364,8 +312,8 @@ struct MediumWidgetView: View {
     }
     
     var gradientColors: [Color] {
-        let hour = Calendar.current.component(.hour, from: Date())
-        let minute = Calendar.current.component(.minute, from: Date())
+        let hour = Calendar.current.component(.hour, from: entry.date)
+        let minute = Calendar.current.component(.minute, from: entry.date)
         let timeProgress = Double(hour) + Double(minute) / 60.0
         
         if timeProgress < 5 || timeProgress > 22 {
@@ -465,6 +413,7 @@ struct SundayWidgetBundle: WidgetBundle {
     
     var body: some Widget {
         SundayWidget()
+        SunSessionLiveActivity()
     }
 }
 
@@ -472,18 +421,65 @@ struct SundayWidget: Widget {
     let kind: String = "SundayWidget"
 
     var body: some WidgetConfiguration {
-        IntentConfiguration(kind: kind, intent: ConfigurationIntent.self, provider: Provider()) { entry in
+        StaticConfiguration(kind: kind, provider: Provider()) { entry in
             SundayWidgetEntryView(entry: entry)
         }
-        .configurationDisplayName("Sun Day")
-        .description("Track UV and vitamin D intake")
+        .configurationDisplayName("Fry Day")
+        .description("UV forecasts and estimated sun exposure")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
 }
 
-struct SundayWidget_Previews: PreviewProvider {
-    static var previews: some View {
-        SundayWidgetEntryView(entry: SimpleEntry(date: Date(), uvIndex: 5.0, todaysTotal: 2500, isTracking: false, vitaminDRate: 350, locationName: "Rome", moonPhaseName: "Full Moon", altitude: 100, uvMultiplier: 1.01, cloudCover: 20.0, configuration: ConfigurationIntent()))
-            .previewContext(WidgetPreviewContext(family: .systemSmall))
+
+struct SunSessionLiveActivity: Widget {
+    private let orange = Color.orange
+    var body: some WidgetConfiguration {
+        ActivityConfiguration(for: SunSessionAttributes.self) { context in
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Label("Fry Day", systemImage: "sun.max.fill").font(.headline).foregroundStyle(.orange)
+                    Spacer()
+                    Text(context.attributes.startedAt, style: .timer).font(.title2.monospacedDigit())
+                }
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Sun session running").font(.subheadline)
+                        Text("Check in at \(context.state.reminderDate.formatted(date: .omitted, time: .shortened))").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Link(destination: endURL(context.attributes)) {
+                        Label("End", systemImage: "stop.fill").font(.headline).padding(.horizontal, 16).padding(.vertical, 10)
+                            .background(.orange, in: Capsule()).foregroundStyle(.black)
+                    }
+                }
+                if !context.isStale, let uv = context.state.uv {
+                    Text("Open-Meteo forecast UV \(uv, specifier: "%.1f")").font(.caption).foregroundStyle(.secondary)
+                }
+            }.padding().activityBackgroundTint(Color(red: 0.09, green: 0.11, blue: 0.14))
+                .activitySystemActionForegroundColor(.orange)
+        } dynamicIsland: { context in
+            DynamicIsland {
+                DynamicIslandExpandedRegion(.leading) { Label("Fry Day", systemImage: "sun.max.fill").foregroundStyle(.orange) }
+                DynamicIslandExpandedRegion(.trailing) { Text(context.attributes.startedAt, style: .timer).monospacedDigit() }
+                DynamicIslandExpandedRegion(.bottom) {
+                    HStack {
+                        Text("Check in at \(context.state.reminderDate.formatted(date: .omitted, time: .shortened))").font(.caption)
+                        Spacer()
+                        Link("End session", destination: endURL(context.attributes)).foregroundStyle(.orange)
+                    }
+                }
+            } compactLeading: {
+                Image(systemName: "sun.max.fill").foregroundStyle(.orange)
+            } compactTrailing: {
+                Text(context.attributes.startedAt, style: .timer).monospacedDigit().frame(width: 48)
+            } minimal: {
+                Image(systemName: "sun.max.fill").foregroundStyle(.orange)
+            }
+            .widgetURL(URL(string: "fryday://session"))
+            .keylineTint(.orange)
+        }
+    }
+    private func endURL(_ attributes: SunSessionAttributes) -> URL {
+        URL(string: "fryday://end?session=\(attributes.sessionID.uuidString)")!
     }
 }

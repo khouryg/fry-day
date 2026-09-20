@@ -1,104 +1,31 @@
-# Privacy Policy for Sun Day
+# Fry Day privacy policy
 
-*Last updated: January 2025*
+Updated September 19, 2026.
 
-## Overview
+Fry Day is an independent continuation of Sun Day. This policy describes the Fry Day implementation in this repository.
 
-Sun Day is designed with your privacy in mind. We believe in transparency and want you to understand exactly how your data is used.
+## Location and weather
 
-## Data Collection and Usage
+With your permission, the app obtains your location while in use and sends latitude and longitude to Open-Meteo to request UV forecasts. Coordinates are not sent to an app-operated server. The request also exposes your IP address to Open-Meteo. Its [terms and privacy policy](https://open-meteo.com/en/terms) explain that troubleshooting logs may contain coordinates and are deleted after 90 days.
 
-### Location Data
-- **What we collect**: Your current location (latitude, longitude, altitude)
-- **Why**: To fetch UV index data for your specific location
-- **How it's used**: Coordinates are sent to Open-Meteo weather API to retrieve UV data
-- **Storage**: Not stored; only used in real-time
+Apple's Core Location geocoder is used to show a place name. The last place name is shared locally with the widget. A cached weather response containing the last approved coordinates, forecast data, and its update time is stored in the device cache and shared with the app’s widget. The widget uses that last location to request fresh forecasts about every three hours when iOS allows, without requesting GPS updates. Successful fetches replace the shared forecast. iOS may remove this cache. Background GPS tracking is not enabled. You can revoke location permission in Settings.
 
-### Health Data
-- **What we collect**: 
-  - Fitzpatrick skin type (if available in Apple Health)
-  - Date of birth (to calculate age factor)
-  - Vitamin D history (past 7-14 days for adaptation factor)
-- **Why**: To personalize vitamin D calculations
-- **How it's used**: Read from and written to Apple HealthKit
-- **Storage**: Stored securely in Apple Health on your device
+## Sessions and profile
 
-### User Preferences
-- **What we collect**: Your selected skin type, clothing level, age (if not from Health)
-- **Why**: To remember your preferences between app sessions
-- **Storage**: Stored locally on your device using UserDefaults
+Session times, selected clothing/sunscreen/skin type, optional age, and forecast samples used for exposure estimates are saved in a local file protected by iOS file protection. This folder is excluded from device backups. Your session history can be deleted one record at a time in the app. Deleting the app removes its remaining local files.
 
-## Third-Party Services
+Apple Health integration is optional and requested only when you choose to import an available age and skin type. Imported profile values remain in the same protected, backup-excluded local file. Fry Day does not write vitamin D estimates to Health and does not read dietary vitamin D history. You can manage Health permissions in Health or Settings. Revoking access does not itself delete profile values already imported; clear the age in How It Works and change skin type using the main screen or delete the app.
 
-### Open-Meteo API
-- **What we share**: Location coordinates only
-- **Purpose**: Retrieve UV index and weather data
-- **Their privacy**: No authentication required, no personal data collected
-- **More info**: https://open-meteo.com/en/terms
+## Widgets, Live Activities, and notifications
 
-### Farmsense API
-- **What we share**: Current timestamp only
-- **Purpose**: Display moon phase
-- **Their privacy**: No authentication required, no personal data collected
-- **More info**: https://www.farmsense.net/
+The app shares a minimal snapshot with its own widget using an App Group: the last location name, coordinates and forecast, estimated daily total, and active session identity/start time. These values stay on-device and may be visible on the Home Screen. Live Activities display session time and reminder/forecast information on the Lock Screen and Dynamic Island; anyone who can see your screen may see that information. You can disable widgets, Live Activities, and notifications through iOS controls.
 
-## Data Storage
+Check-in reminders use local notifications. Fry Day does not operate a push notification server. A reminder can be delayed or hidden by iOS notification settings or Focus modes.
 
-- **All data stays on your device**
-- **No cloud storage or accounts**
-- **No analytics or tracking**
-- **No advertising identifiers**
+## Other collection and services
 
-## Permissions
+Fry Day includes no analytics SDK, advertising, accounts, advertising identifier access, or developer-operated data collection service. It does not sell data. Network services may receive technical connection information as described in their policies. GitHub hosts the source code, support issues, methodology, and this policy; opening those links uses GitHub's service under its own privacy terms.
 
-### Location (Required)
-Used solely to fetch UV data for your current position
+## Contact and changes
 
-### Health (Optional)
-- Read: Skin type, date of birth, vitamin D history
-- Write: Vitamin D intake from sun exposure
-
-### Notifications (Optional)
-Local notifications only for:
-- Sunrise/sunset times
-- Sun exposure warnings
-
-## Data Sharing
-
-**We do not:**
-- Collect personal information
-- Track your usage
-- Share data with advertisers
-- Store data on external servers
-- Use analytics services
-
-## Children's Privacy
-
-Sun Day does not knowingly collect data from children under 13. The app is designed for general use with health calculations suitable for all ages.
-
-## Changes to This Policy
-
-Any updates to this privacy policy will be reflected in the app's next update with an updated "Last updated" date.
-
-## Open Source
-
-Sun Day is open source. You can review the entire codebase at:
-https://github.com/jackjackbits/sunday
-
-## Contact
-
-For privacy questions or concerns:
-- Create an issue on GitHub
-- The app is provided as-is with no warranty
-
-## Your Rights
-
-You can:
-- Deny location access (app will use estimated data)
-- Deny health access (manually enter data)
-- Delete the app to remove all local data
-- Review all code since it's open source
-
----
-
-This privacy policy is released into the public domain alongside the app code.
+For support, privacy questions, or deletion questions, [open an issue](https://github.com/khouryg/fry-day/issues). Do not put private health information in public issues. Policy changes will update this document and its date.

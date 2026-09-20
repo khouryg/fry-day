@@ -1,139 +1,34 @@
-# Sun Day - Vitamin D Calculation Methodology
+# Fry Day exposure estimates
 
-## Overview
+This implementation retains a simplified vitamin D model from Sun Day. **The formula and its coefficients have not been clinically validated.** Results are modeled estimates, not measurements of vitamin D status, absorbed UV dose, or safe exposure duration. They must not be used to diagnose deficiency, determine supplements, or decide how long someone can safely remain in the sun. Consult a clinician before making medical decisions.
 
-Sun Day calculates vitamin D synthesis from UV exposure using a multi-factor model based on scientific research. The app aims to provide personalized, accurate estimates while remaining conservative for safety. See [citations](https://github.com/jackjackbits/sunday/blob/main/METHODOLOGY.md#references).
+## Shared calculation
 
-## Core Formula
+Both live and manual sessions use one calculation:
 
-```
-Vitamin D Rate (IU/hour) = Base Rate × UV Factor × Clothing Factor × Skin Type Factor × Age Factor × Quality Factor × Adaptation Factor
-```
+`IU/hour = 21000 × (3 × UV / (4 + UV)) × clothing × sunscreen × skin × age`
 
-## Factor Breakdown
+- Clothing: uncovered 1.0; swimwear 0.80; shorts/tee 0.50; pants/tee 0.30; pants/sleeves 0.10.
+- Sunscreen transmission assumptions: none 1.0; SPF 15 0.07; SPF 30 0.03; SPF 50 0.02; SPF 100+ 0.01. These idealized factors do not measure application, wear, or protection in practice.
+- Skin factors I–VI: 1.25, 1.10, 1.0, 0.70, 0.40, 0.20.
+- Optional age factor: 1.0 through age 20, then a continuous 0.015 decrease per year, reaching 0.25 at age 70 and remaining there. This is an inherited modeling assumption with its previous discontinuity removed, not a validated individual prediction.
 
-### 1. Base Rate (21,000 IU/hr)
-- Represents minimal clothing exposure (~80% body surface area)
-- Conservative estimate within research range of 20,000-40,000 IU/hr
-- Studies show 10,000 IU in 20-30 minutes typical
-- Full body exposure can reach 30,000-40,000 IU/hr in optimal conditions
+The previous clock-only quality multiplier and dietary-intake-based adaptation multiplier were removed. Foods and supplements must not be interpreted as recent sun exposure.
 
-### 2. UV Factor (Non-linear)
-- Implements Michaelis-Menten-like saturation curve
-- Formula: `uvFactor = (uvIndex × 3.0) / (4.0 + uvIndex)`
-- Accounts for:
-  - Vitamin D synthesis plateaus at high UV levels
-  - Photodegradation of vitamin D above UV ~8
-  - Limited 7-dehydrocholesterol in skin
+## Weather and time
 
-### 3. Clothing Factor
-- **Nude (100%)**: Full body exposure
-- **Minimal/Swimwear (80%)**: Typical beach attire
-- **Light/Shorts & T-shirt (40%)**: Summer casual wear
-- **Moderate/Long sleeves (15%)**: Business casual
-- **Heavy/Fully covered (5%)**: Winter clothing
+Open-Meteo supplies hourly forecast UV values. Epoch timestamps avoid phone/API time-zone and DST indexing errors. Each running session records the forecast and settings in effect at each change. Past segments retain their original inputs; new forecasts affect subsequent time.
 
-### 4. Skin Type Factor (Fitzpatrick Scale)
-- **Type I (125%)**: Very fair, always burns - highest vitamin D production
-- **Type II (110%)**: Fair, usually burns
-- **Type III (100%)**: Light, sometimes burns - reference type
-- **Type IV (70%)**: Medium, rarely burns
-- **Type V (40%)**: Dark, very rarely burns  
-- **Type VI (20%)**: Very dark, never burns
+Calculation integrates rates in steps of at most one minute, splitting at forecast and setting boundaries. Interpolation is limited to adjacent hourly samples. Missing or out-of-coverage time is excluded and disclosed. Correcting an end time truncates this same timeline. Manual entries require forecast coverage for the whole selected interval; they do not fabricate historical weather.
 
-Based on melanin's UV filtering effect and research showing 5-10x longer exposure needed for darker skin types.
+Forecasts describe ambient conditions, not personal exposure. Shade, glass, orientation, clothing coverage, and sunscreen use introduce uncertainty. The app does not infer whether the user has gone indoors.
 
-### 5. Age Factor
-- **≤20 years**: 100% efficiency
-- **20-70 years**: Linear decrease (~1% per year)
-- **≥70 years**: 25% efficiency
+## Reminders and Health
 
-Reflects decreased 7-dehydrocholesterol in aging skin.
+The reminder interval is selected by the user and is not a burn limit. Live Activities do not keep app code running continuously. Persisted timestamps let elapsed timers render while the app is suspended, and local notifications provide a separate check-in.
 
-### 6. UV Quality Factor (Time of Day)
-- Accounts for solar zenith angle effects on UV-B transmission
-- Peak quality around solar noon (10 AM - 3 PM)
-- More gradual decrease at low sun angles (exp(-0.2) vs exp(-0.3))
-- Morning/evening UV has less effective UV-B wavelengths
+Modeled estimates are stored only in Fry Day. They are not exported to Health's dietary vitamin D field, which measures consumption. Optional Health access reads age and skin type only.
 
-### 7. Adaptation Factor
-- Based on 7-14 day exposure history from HealthKit
-- Range: 0.8-1.2x
-- Regular exposure upregulates vitamin D synthesis pathways
-- Prevents "shock" calculations for pale individuals suddenly exposed
+## Provenance
 
-## Scientific Basis
-
-### UV-B and Vitamin D Synthesis
-- Only UV-B wavelengths (290-315nm) produce vitamin D
-- 7-dehydrocholesterol + UV-B → pre-vitamin D3 → vitamin D3
-- Process self-regulates through photoisomerization equilibrium
-
-### Altitude Effects
-- UV increases ~10% per 1000m elevation
-- Implemented as simple multiplier on base UV index
-
-### Cloud Cover
-- Already factored into UV index from weather API
-- Clear sky UV only used for reference
-
-### Daily Synthesis Limits
-- Body naturally limits to ~20,000 IU/day
-- Excess pre-vitamin D3 converts to inactive photoisomers
-- Prevents toxicity from sun exposure alone
-
-## Data Sources
-
-1. **UV Index**: Open-Meteo API (includes cloud effects)
-2. **Location**: iOS Core Location
-3. **User Characteristics**: Apple Health (when available)
-4. **Historical Data**: HealthKit vitamin D records
-
-## Burn Time Calculation
-
-Burn time is based on the **full MED** (Minimal Erythema Dose):
-
-```
-Burn Time = MED at UV 1 / Current UV
-```
-
-Real-world MED values at UV index 1:
-- Type I: 150 minutes (burns in ~30 min at UV 5)
-- Type II: 250 minutes (burns in ~45-50 min at UV 5)
-- Type III: 425 minutes (burns in ~75-85 min at UV 5)
-- Type IV: 600 minutes (burns in ~100-120 min at UV 5)
-- Type V: 850 minutes (burns in ~150-180 min at UV 5)
-- Type VI: 1100 minutes (rarely burns)
-
-These values reflect actual outdoor conditions with natural cooling and movement.
-The app notifies users at 80% of burn time as a safety warning.
-
-## Vitamin D Winter
-
-Above 35° latitude, UV-B is insufficient for vitamin D synthesis during winter months:
-- **November-February**: Minimal to no synthesis
-- **March & October**: Marginal synthesis (UV often < 3)
-- App displays warning and recommends supplementation
-
-## Safety Considerations
-
-- Base rate calibrated to typical exposure patterns
-- Burn time based on full MED
-- Seasonal warnings for vitamin D winter
-- Cannot reach toxic levels from UV exposure alone
-
-## Future Improvements
-
-1. **Spectral UV Data**: Use UV-B specific measurements when available
-2. **Body Surface Area**: More precise calculation based on height/weight
-3. **Seasonal Adjustments**: Winter UV-B availability at high latitudes
-4. **Individual Calibration**: Learn from user's actual vitamin D blood tests
-
-## Citations
-
-- Holick, M.F. (2007). "Vitamin D deficiency." New England Journal of Medicine
-- Webb, A.R. et al. (2018). "The role of sunlight exposure in determining the vitamin D status"
-- Engelsen, O. (2010). "The relationship between ultraviolet radiation exposure and vitamin D status"
-- MacLaughlin, J. & Holick, M.F. (1985). "Aging decreases the capacity of human skin to produce vitamin D3"
-- Çekmez, Y. et al. (2024). "Time and duration of vitamin D synthesis" PMC10861575
-- Various studies on MED and safe sun exposure from SunSmart Australia
+The original implementation and research references remain available in the [upstream methodology at the reviewed commit](https://github.com/jackjackbits/sunday/blob/d8331e9acafd3f3b33cdd2d41fd89a347b385c22/METHODOLOGY.md). Citing that document does not establish validation of Fry Day's formula. A scientific review of coefficients and product claims remains a release-readiness item.

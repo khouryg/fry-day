@@ -1,730 +1,225 @@
 import Foundation
 import Combine
-import HealthKit
-import UserNotifications
-import WidgetKit
 import UIKit
-import OSLog
+import WidgetKit
 
-enum ClothingLevel: Int, CaseIterable {
-    case none = -1
-    case minimal = 0
-    case light = 1
-    case moderate = 2
-    case heavy = 3
-    
-    var description: String {
-        switch self {
-        case .none: return "Nude!"
-        case .minimal: return "Minimal (swimwear)"
-        case .light: return "Light (shorts, tee)"
-        case .moderate: return "Moderate (pants, tee)"
-        case .heavy: return "Heavy (pants, sleeves)"
-        }
-    }
-    
-    var shortDescription: String {
-        switch self {
-        case .none: return "Nude!"
-        case .minimal: return "Minimal"
-        case .light: return "Light"
-        case .moderate: return "Moderate"
-        case .heavy: return "Heavy"
-        }
-    }
-    
-    var exposureFactor: Double {
-        switch self {
-        case .none: return 1.0
-        case .minimal: return 0.80
-        case .light: return 0.50
-        case .moderate: return 0.30
-        case .heavy: return 0.10
-        }
-    }
-}
-
-enum SunscreenLevel: Int, CaseIterable {
-    case none = 0
-    case spf15 = 15
-    case spf30 = 30
-    case spf50 = 50
-    case spf100 = 100
-    
-    var description: String {
-        switch self {
-        case .none: return "None"
-        case .spf15: return "SPF 15"
-        case .spf30: return "SPF 30"
-        case .spf50: return "SPF 50"
-        case .spf100: return "SPF 100+"
-        }
-    }
-    
-    var uvTransmissionFactor: Double {
-        switch self {
-        case .none: return 1.0      // 100% UV passes through
-        case .spf15: return 0.07    // ~7% UV passes through (blocks 93%)
-        case .spf30: return 0.03    // ~3% UV passes through (blocks 97%)
-        case .spf50: return 0.02    // ~2% UV passes through (blocks 98%)
-        case .spf100: return 0.01   // ~1% UV passes through (blocks 99%)
-        }
-    }
-}
-
-enum SkinType: Int, CaseIterable {
-    case type1 = 1
-    case type2 = 2
-    case type3 = 3
-    case type4 = 4
-    case type5 = 5
-    case type6 = 6
-    
-    var description: String {
-        switch self {
-        case .type1: return "Very fair"
-        case .type2: return "Fair"
-        case .type3: return "Light"
-        case .type4: return "Medium"
-        case .type5: return "Dark"
-        case .type6: return "Very dark"
-        }
-    }
-    
-    var vitaminDFactor: Double {
-        switch self {
-        case .type1: return 1.25   // Very fair produces more
-        case .type2: return 1.1    // Fair produces more
-        case .type3: return 1.0    // Light skin is reference
-        case .type4: return 0.7    // Medium skin
-        case .type5: return 0.4    // Dark skin
-        case .type6: return 0.2    // Very dark skin
-        }
-    }
-}
-
-class VitaminDCalculator: ObservableObject {
-    @Published var isInSun = false
-    @Published var clothingLevel: ClothingLevel = .light {
-        didSet {
-            UserDefaults.standard.set(clothingLevel.rawValue, forKey: "preferredClothingLevel")
-        }
-    }
-    @Published var sunscreenLevel: SunscreenLevel = .none {
-        didSet {
-            UserDefaults.standard.set(sunscreenLevel.rawValue, forKey: "preferredSunscreenLevel")
-        }
-    }
-    @Published var skinType: SkinType = .type3 {
-        didSet {
-            UserDefaults.standard.set(skinType.rawValue, forKey: "userSkinType")
-            // Check if manually selected type matches HealthKit value
-            if !isSettingFromHealth {
-                checkIfMatchesHealthKitSkinType()
-            }
-        }
-    }
-    @Published var currentVitaminDRate: Double = 0.0
-    @Published var sessionVitaminD: Double = 0.0
-    @Published var sessionStartTime: Date?
-    @Published var skinTypeFromHealth = false
-    @Published var cumulativeMEDFraction: Double = 0.0
-    @Published var userAge: Int? = nil {
-        didSet {
-            if let age = userAge {
-                UserDefaults.standard.set(age, forKey: "userAge")
-            } else {
-                UserDefaults.standard.removeObject(forKey: "userAge")
-            }
-        }
-    }
-    @Published var ageFromHealth = false
-    @Published var currentUVQualityFactor: Double = 1.0
-    @Published var currentAdaptationFactor: Double = 1.0
-    
+@MainActor
+final class VitaminDCalculator: ObservableObject {
+    @Published private(set) var archive = SessionArchive()
+    @Published private(set) var totals = ExposureTotals()
+    @Published private(set) var currentVitaminDRate = 0.0
+    @Published var errorMessage: String?
+    @Published var reminderStatus: String?
+    @Published private(set) var settings = ExposureSettings()
+    @Published var reminderMinutes = 20
+    @Published private(set) var now = Date()
+    private var loaded = false
+    private let store: SessionFileStore
     private var timer: Timer?
-    private var lastUV: Double = 0.0
-    private var healthManager: HealthManager?
-    private var isSettingFromHealth = false
-    private weak var uvService: UVService?
-    private var healthKitSkinType: SkinType?
-    private var lastUpdateTime: Date?
-    private var lastRateUpdateTime: Date?
-    private var lastRateUV: Double = -1
-    private let sharedDefaults = UserDefaults(suiteName: "group.sunday.widget")
-    private var appActiveObserver: NSObjectProtocol?
-    private var appBackgroundObserver: NSObjectProtocol?
-    private var wasTrackingBeforeBackground = false
-    private var lastSessionSaveTime: Date?
-    private var lastWidgetUpdateTime: Date?
-    private let widgetUpdateThrottle: TimeInterval = 60.0
-    private var todaysHealthBase: Double = 0.0
-    private var lastHealthBaseRefreshTime: Date?
-    private let healthBaseRefreshInterval: TimeInterval = 900.0 // 15 min
-    #if DEBUG
-    private var sessionInterval: OSSignpostIntervalState?
-    private static let logger = Logger(subsystem: "it.sunday.app", category: "Calculator")
-    private let signposter = OSSignposter(subsystem: "it.sunday.app", category: "Calculator")
-    #endif
-    
-    // UV response curve parameters
-    private let uvHalfMax = 4.0  // UV index for 50% vitamin D synthesis rate (more linear)
-    private let uvMaxFactor = 3.0 // Maximum multiplication factor at high UV
-    
-    init() {
-        loadUserPreferences()
-        setupAppLifecycleObservers()
-        restoreActiveSession()
+    private var observers: [NSObjectProtocol] = []
+    private var forecast: [UVSample] = []
+    private var weatherUpdatedAt: Date?
+    private var currentUV: Double?
+    private let activity = SessionActivityController()
+    private let reminders = SessionReminderController()
+    private let shared = UserDefaults(suiteName: "group.com.khouryg.fryday")
+    private var lastWidgetUpdate = Date.distantPast
+
+    var liveActivityStatus: String? { activity.status }
+    var active: ExposureSession? { archive.active }
+    var isInSun: Bool { active != nil && active?.end == nil }
+    var sessionVitaminD: Double { totals.iu }
+    var sessionStartTime: Date? { active?.start }
+    var completed: [ExposureSession] { archive.completed.sorted { $0.start > $1.start } }
+    var hasIncompleteCoverage: Bool {
+        guard let active else { return false }
+        return (active.end ?? now).timeIntervalSince(active.start) - totals.coveredSeconds > 60
     }
-    
-    deinit {
-        if let observer = appActiveObserver {
-            NotificationCenter.default.removeObserver(observer)
-        }
-        if let observer = appBackgroundObserver {
-            NotificationCenter.default.removeObserver(observer)
-        }
+    var todayTotal: Double {
+        let start = Calendar.current.startOfDay(for: now)
+        let saved = archive.completed.reduce(0) { $0 + $1.totals(until: now, since: start).iu }
+        return saved + (active?.totals(until: now, since: start).iu ?? 0)
     }
-    
-    func setHealthManager(_ healthManager: HealthManager) {
-        self.healthManager = healthManager
-        checkHealthKitSkinType()
-        checkHealthKitAge()
-        updateAdaptationFactor()
-        // Prime today's base from Health
-        refreshTodaysHealthBase(force: true)
-    }
-    
-    func setUVService(_ uvService: UVService) {
-        self.uvService = uvService
-    }
-    
-    private func getSafeMinutes() -> Int {
-        guard let uvService = uvService else { return 60 }
-        return uvService.burnTimeMinutes[skinType.rawValue] ?? 60
-    }
-    
-    private func loadUserPreferences() {
-        if let savedClothingLevel = UserDefaults.standard.object(forKey: "preferredClothingLevel") as? Int,
-           let clothing = ClothingLevel(rawValue: savedClothingLevel) {
-            clothingLevel = clothing
-        }
-        
-        if let savedSunscreenLevel = UserDefaults.standard.object(forKey: "preferredSunscreenLevel") as? Int,
-           let sunscreen = SunscreenLevel(rawValue: savedSunscreenLevel) {
-            sunscreenLevel = sunscreen
-        }
-        
-        if let savedSkinType = UserDefaults.standard.object(forKey: "userSkinType") as? Int,
-           let skin = SkinType(rawValue: savedSkinType) {
-            skinType = skin
-        }
-        
-        if let savedAge = UserDefaults.standard.object(forKey: "userAge") as? Int {
-            userAge = savedAge
-        } else {
-            userAge = nil
-        }
-    }
-    
-    private func setupAppLifecycleObservers() {
-        appBackgroundObserver = NotificationCenter.default.addObserver(
-            forName: UIApplication.didEnterBackgroundNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            guard let self = self else { return }
-            // Save tracking state and pause timer
-            self.wasTrackingBeforeBackground = self.isInSun
-            if self.isInSun {
-                // Save session state before going to background
-                self.saveActiveSession()
-                self.timer?.invalidate()
-                self.timer = nil
+
+    init(store: SessionFileStore? = nil) {
+        let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("FryDay", isDirectory: true)
+        self.store = store ?? SessionFileStore(url: directory.appendingPathComponent("sessions.json"))
+        let savedMinutes = UserDefaults.standard.integer(forKey: "reminderMinutes")
+        if [10, 20, 30, 60].contains(savedMinutes) { reminderMinutes = savedMinutes }
+        reload()
+        observers.append(NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                self?.timer?.invalidate()
+                self?.timer = nil
+                self?.refresh(forceWidget: true)
             }
-        }
-        
-        appActiveObserver = NotificationCenter.default.addObserver(
-            forName: UIApplication.didBecomeActiveNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            guard let self = self else { return }
-            // Resume timer if was tracking
-            if self.wasTrackingBeforeBackground && self.isInSun && self.timer == nil {
-                // Resume with 1-second timer
-                self.timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-                    guard let self = self else { return }
-                    let currentUV = self.lastUV
-                    self.updateVitaminD(uvIndex: currentUV)
-                    self.updateMEDExposure(uvIndex: currentUV)
-                }
-                // Update immediately
-                self.updateVitaminD(uvIndex: self.lastUV)
-                self.updateMEDExposure(uvIndex: self.lastUV)
+        })
+        observers.append(NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                self?.refresh(forceWidget: true)
+                self?.startTimer()
+                self?.syncActivity(allowStart: false)
             }
+        })
+        startTimer()
+        // Reconcile orphan activities without recreating ones the user dismissed.
+        syncActivity(allowStart: false)
+        reminders.synchronize(session: active, requestPermission: false) { [weak self] in self?.reminderStatus = $0 }
+    }
+
+    func reload() {
+        do {
+            archive = try store.load()
+            settings = archive.settings
+            loaded = true
+            errorMessage = nil
+            refresh(forceWidget: true)
+        } catch {
+            loaded = false
+            errorMessage = "Your saved sessions could not be opened. They have been left untouched. Try again after unlocking your device."
         }
     }
-    
-    func startSession(uvIndex: Double) {
-        guard isInSun else { return }
-        
-        // Only reset session data if we're starting a new session (not resuming)
-        if sessionStartTime == nil {
-            sessionStartTime = Date()
-            sessionVitaminD = 0.0
-            cumulativeMEDFraction = 0.0
-            lastUpdateTime = Date()
+
+    @discardableResult
+    private func commit(_ updated: SessionArchive) -> Bool {
+        guard loaded else { return false }
+        do {
+            try store.save(updated)
+            archive = updated
+            errorMessage = nil
+            refresh(forceWidget: true)
+            return true
+        } catch {
+            errorMessage = "The session could not be saved. Please free some storage and try again. Your previous record is unchanged."
+            return false
         }
-        
-        lastUV = uvIndex
-        
-        // Save initial session state
-        saveActiveSession()
-        #if DEBUG
-        let state = signposter.beginInterval("Session")
-        sessionInterval = state
-        Self.logger.debug("Session start UV=\(uvIndex, privacy: .public)")
-        #endif
-        
-        // Update every second for real-time display
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            guard let self = self else { return }
-            // Use the current UV from UVService, not lastUV
-            let currentUV = self.lastUV
-            self.updateVitaminD(uvIndex: currentUV)
-            self.updateMEDExposure(uvIndex: currentUV)
-        }
-        
-        updateVitaminDRate(uvIndex: uvIndex)
     }
-    
-    func stopSession() {
+
+    func startSession() {
+        guard loaded, active == nil, let uv = currentUV, uv > 0,
+              let weatherDate = weatherUpdatedAt, Date().timeIntervalSince(weatherDate) < 900,
+              ExposureSession.uv(at: Date(), in: forecast) != nil else {
+            errorMessage = "Refresh UV data before beginning a session."
+            return
+        }
+        let date = Date()
+        var updated = archive
+        updated.active = ExposureSession(start: date, reminderDate: date.addingTimeInterval(Double(reminderMinutes) * 60), segments: [ExposureSegment(start: date, settings: settings, forecast: forecast)])
+        guard commit(updated) else { return }
+        UserDefaults.standard.set(reminderMinutes, forKey: "reminderMinutes")
+        syncActivity(allowStart: true)
+        reminders.synchronize(session: active, requestPermission: true) { [weak self] in self?.reminderStatus = $0 }
+    }
+
+    func prepareCompletion(sessionID: UUID? = nil) {
+        guard let active, active.end == nil, sessionID == nil || active.id == sessionID else { return }
+        var updated = archive
+        updated.active?.end = Date()
+        guard commit(updated) else { return }
+        syncActivity(allowStart: false)
+        reminders.synchronize(session: nil, requestPermission: false) { _ in }
+    }
+
+    @discardableResult
+    func saveSession(end: Date) -> Bool {
+        guard active != nil else { return false }
+        var updated = archive
+        updated.complete(at: min(end, Date()))
+        guard commit(updated) else { return false }
+        syncActivity(allowStart: false)
+        reminders.synchronize(session: nil, requestPermission: false) { _ in }
+        return true
+    }
+
+    func continueSession() {
+        guard active != nil else { return }
+        var updated = archive
+        updated.active?.end = nil
+        updated.active?.reminderDate = Date().addingTimeInterval(Double(reminderMinutes) * 60)
+        guard commit(updated) else { return }
+        syncActivity(allowStart: true)
+        reminders.synchronize(session: active, requestPermission: true) { [weak self] in self?.reminderStatus = $0 }
+    }
+
+    @discardableResult
+    func discardSession() -> Bool {
+        var updated = archive
+        updated.active = nil
+        guard commit(updated) else { return false }
+        syncActivity(allowStart: false)
+        reminders.synchronize(session: nil, requestPermission: false) { _ in }
+        return true
+    }
+
+    func deleteSession(id: UUID) {
+        var updated = archive
+        updated.completed.removeAll { $0.id == id }
+        _ = commit(updated)
+    }
+
+    @discardableResult
+    func addManualSession(start: Date, end: Date, settings: ExposureSettings, forecast: [UVSample]) -> Bool {
+        guard loaded, active == nil, start < end, end <= Date() else { return false }
+        let session = ExposureSession(start: start, end: end, reminderDate: end, segments: [ExposureSegment(start: start, settings: settings, forecast: forecast)])
+        guard session.totals(until: end).coveredSeconds >= end.timeIntervalSince(start) - 1 else {
+            errorMessage = "UV data does not cover the whole interval. Choose a shorter interval or refresh the forecast."
+            return false
+        }
+        var updated = archive
+        updated.completed.append(session)
+        return commit(updated)
+    }
+
+    func updateSettings(_ newSettings: ExposureSettings) {
+        var updated = archive
+        if isInSun { updated.active?.segments.append(ExposureSegment(start: Date(), settings: newSettings, forecast: forecast)) }
+        updated.settings = newSettings
+        guard commit(updated) else { return }
+        settings = newSettings
+        refresh(forceWidget: true)
+    }
+
+    func updateForecast(_ samples: [UVSample], updatedAt: Date?) {
+        let sorted = samples.filter { $0.uv.isFinite }.sorted { $0.date < $1.date }
+        guard !sorted.isEmpty else { return }
+        if forecast != sorted && isInSun {
+            var updated = archive
+            // Keep the forecast used for elapsed time; new conditions affect future time only.
+            updated.active?.segments.append(ExposureSegment(start: Date(), settings: settings, forecast: sorted))
+            guard commit(updated) else { return }
+        }
+        forecast = sorted
+        weatherUpdatedAt = updatedAt
+        refresh(forceWidget: true)
+        syncActivity(allowStart: false)
+    }
+
+    private func startTimer() {
         timer?.invalidate()
-        timer = nil
-        sessionStartTime = nil
-        cumulativeMEDFraction = 0.0
-        
-        // Cancel any pending burn warnings
-        UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["burnWarning"])
-        
-        // Clear saved session state
-        saveActiveSession()
-        
-        // Update widget data (force reload once on stop)
-        updateWidgetData(force: true)
-        #if DEBUG
-        if let state = sessionInterval {
-            signposter.endInterval("Session", state)
-            sessionInterval = nil
-        }
-        Self.logger.debug("Session stop")
-        #endif
-    }
-    
-    func updateUV(_ uvIndex: Double) {
-        lastUV = uvIndex
-        updateVitaminDRate(uvIndex: uvIndex)
-    }
-    
-    private func updateVitaminDRate(uvIndex: Double) {
-        // Always calculate the rate to show potential vitamin D gain
-        // Base rate: 21000 IU/hr for Type 3 skin with minimal clothing (80% exposure)
-        // Conservative estimate within research range of 20,000-40,000 IU/hr
-        // Full body exposure can reach 30,000-40,000 IU/hr in optimal conditions
-        let baseRate = 21000.0
-        
-        // UV factor: Michaelis-Menten-like saturation curve
-        // More accurate representation of vitamin D synthesis kinetics
-        // UV 0 = 0x, UV 4 ≈ 1.5x (50% of max), UV 12 ≈ 2.25x, UV∞ → 3.0x
-        let uvFactor = (uvIndex * uvMaxFactor) / (uvHalfMax + uvIndex)
-        
-        // Exposure based on clothing coverage
-        let exposureFactor = clothingLevel.exposureFactor
-        
-        // Sunscreen blocks UV radiation
-        let sunscreenFactor = sunscreenLevel.uvTransmissionFactor
-        
-        // Skin type affects vitamin D synthesis efficiency
-        let skinFactor = skinType.vitaminDFactor
-        
-        // Age factor: vitamin D synthesis decreases with age
-        // ~25% synthesis at age 70 compared to age 20
-        // Only apply if we have age data from Apple Health
-        let ageFactor: Double
-        if let age = userAge {
-            if age <= 20 {
-                ageFactor = 1.0
-            } else if age >= 70 {
-                ageFactor = 0.25
-            } else {
-                // Linear decrease: lose ~1% per year after age 20
-                ageFactor = max(0.25, 1.0 - Double(age - 20) * 0.01)
-            }
-        } else {
-            // No age data available, don't apply age factor
-            ageFactor = 1.0
-        }
-        
-        // Calculate UV quality factor based on time of day
-        currentUVQualityFactor = calculateUVQualityFactor()
-        
-        // Final calculation: base * UV * clothing * sunscreen * skin type * age * quality * adaptation
-        currentVitaminDRate = baseRate * uvFactor * exposureFactor * sunscreenFactor * skinFactor * ageFactor * currentUVQualityFactor * currentAdaptationFactor
-        
-        // Throttled widget update
-        updateWidgetData()
-    }
-    
-    private func updateVitaminD(uvIndex: Double) {
-        guard isInSun else { return }
-        
-        // Recalculate rate only when UV changed meaningfully or quality factor needs refresh (~60s)
-        let now = Date()
-        let uvChanged = abs(uvIndex - lastRateUV) > 0.01
-        let needsQualityRefresh = lastRateUpdateTime == nil || now.timeIntervalSince(lastRateUpdateTime!) >= 60.0
-        if uvChanged || needsQualityRefresh {
-            updateVitaminDRate(uvIndex: uvIndex)
-            lastRateUpdateTime = now
-            lastRateUV = uvIndex
-        }
-        
-        // Calculate actual time elapsed since last update (should be ~1 second)
-        let elapsed = lastUpdateTime.map { now.timeIntervalSince($0) } ?? 1.0
-        lastUpdateTime = now
-        
-        // Add vitamin D based on actual elapsed time
-        sessionVitaminD += currentVitaminDRate * (elapsed / 3600.0)
-        
-        // Save session state every 10 seconds
-        if lastSessionSaveTime == nil || now.timeIntervalSince(lastSessionSaveTime!) >= 10.0 {
-            saveActiveSession()
-            lastSessionSaveTime = now
-        }
-        
-        // Throttled widget update
-        updateWidgetData()
-    }
-    
-    func toggleSunExposure(uvIndex: Double) {
-        isInSun.toggle()
-        #if DEBUG
-        Self.logger.debug("Toggle exposure -> isInSun=\(self.isInSun, privacy: .public) UV=\(uvIndex, privacy: .public)")
-        #endif
-        
-        if isInSun {
-            startSession(uvIndex: uvIndex)
-        } else {
-            stopSession()
-        }
-    }
-    
-    func addManualEntry(amount: Double) {
-        // Simply add the manual entry amount to today's session vitamin D
-        // This will be saved to Health by the view that calls this
-        sessionVitaminD += amount
-        
-        // Update widget data to reflect the new total
-        updateWidgetData(force: true)
-    }
-    
-    func calculateVitaminD(uvIndex: Double, exposureMinutes: Double, skinType: SkinType, clothingLevel: ClothingLevel, sunscreenLevel: SunscreenLevel = .none) -> Double {
-        // Base rate: 21000 IU/hr for Type 3 skin with minimal clothing (80% exposure)
-        let baseRate = 21000.0
-        
-        // UV factor: Michaelis-Menten-like saturation curve
-        let uvFactor = (uvIndex * uvMaxFactor) / (uvHalfMax + uvIndex)
-        
-        // Exposure based on clothing coverage
-        let exposureFactor = clothingLevel.exposureFactor
-        
-        // Sunscreen blocks UV radiation
-        let sunscreenFactor = sunscreenLevel.uvTransmissionFactor
-        
-        // Skin type affects vitamin D synthesis efficiency
-        let skinFactor = skinType.vitaminDFactor
-        
-        // Age factor: vitamin D synthesis decreases with age
-        let ageFactor: Double
-        if let age = userAge {
-            if age <= 20 {
-                ageFactor = 1.0
-            } else if age >= 70 {
-                ageFactor = 0.25
-            } else {
-                // Linear decrease: lose ~1% per year after age 20
-                ageFactor = max(0.25, 1.0 - Double(age - 20) * 0.01)
-            }
-        } else {
-            // No age data available, don't apply age factor
-            ageFactor = 1.0
-        }
-        
-        // Current adaptation factor (use current if available, otherwise 1.0)
-        let adaptationFactor = currentAdaptationFactor
-        
-        // Calculate hourly rate
-        let hourlyRate = baseRate * uvFactor * exposureFactor * sunscreenFactor * skinFactor * ageFactor * adaptationFactor
-        
-        // Convert to amount for given minutes
-        return hourlyRate * (exposureMinutes / 60.0)
-    }
-    
-    private func checkHealthKitSkinType() {
-        healthManager?.getFitzpatrickSkinType { [weak self] hkSkinType in
-            guard let self = self, let hkSkinType = hkSkinType else { return }
-            
-            // Map HealthKit Fitzpatrick skin type to our SkinType enum
-            let mappedSkinType: SkinType?
-            switch hkSkinType {
-            case .I:
-                mappedSkinType = .type1
-            case .II:
-                mappedSkinType = .type2
-            case .III:
-                mappedSkinType = .type3
-            case .IV:
-                mappedSkinType = .type4
-            case .V:
-                mappedSkinType = .type5
-            case .VI:
-                mappedSkinType = .type6
-            case .notSet:
-                mappedSkinType = nil
-            @unknown default:
-                mappedSkinType = nil
-            }
-            
-            // Store the HealthKit skin type for comparison
-            self.healthKitSkinType = mappedSkinType
-            
-            // If we got a valid skin type from Health, use it
-            if let mappedSkinType = mappedSkinType {
-                self.isSettingFromHealth = true
-                self.skinType = mappedSkinType
-                self.skinTypeFromHealth = true
-                self.isSettingFromHealth = false
-            } else {
-                self.skinTypeFromHealth = false
-            }
-        }
-    }
-    
-    private func checkHealthKitAge() {
-        healthManager?.getAge { [weak self] age in
-            guard let self = self else { return }
-            
-            if let age = age {
-                self.userAge = age
-                self.ageFromHealth = true
-            } else {
-                self.userAge = nil
-                self.ageFromHealth = false
-            }
-            
-            // Recalculate vitamin D rate with new age (or without it)
-            self.updateVitaminDRate(uvIndex: self.lastUV)
-        }
-    }
-    
-    private func checkIfMatchesHealthKitSkinType() {
-        // If user manually selects the same skin type as HealthKit, show the heart icon
-        if let healthKitType = healthKitSkinType, healthKitType == skinType {
-            skinTypeFromHealth = true
-        } else {
-            skinTypeFromHealth = false
-        }
-    }
-    
-    private func updateMEDExposure(uvIndex: Double) {
-        guard isInSun, uvIndex > 0 else { return }
-        
-        // MED values at UV 1 (must match UVService values)
-        let medTimesAtUV1: [Int: Double] = [
-            1: 150.0,  // Type I
-            2: 250.0,  // Type II
-            3: 425.0,  // Type III
-            4: 600.0,  // Type IV
-            5: 850.0,  // Type V
-            6: 1100.0  // Type VI
-        ]
-        
-        guard let medTimeAtUV1 = medTimesAtUV1[skinType.rawValue] else { return }
-        
-        // Calculate MED per second at current UV
-        let medMinutesAtCurrentUV = medTimeAtUV1 / uvIndex
-        let medFractionPerSecond = 1.0 / (medMinutesAtCurrentUV * 60.0)
-        
-        // Accumulate MED exposure
-        cumulativeMEDFraction += medFractionPerSecond
-        
-        // Check if approaching burn threshold (80% MED)
-        if cumulativeMEDFraction >= 0.8 && cumulativeMEDFraction < 0.81 {
-            // Send notification that user is approaching burn limit
-            scheduleImmediateBurnWarning()
-        }
-    }
-    
-    private func scheduleImmediateBurnWarning() {
-        let content = UNMutableNotificationContent()
-        content.title = "🔥 Approaching burn limit!"
-        content.body = "You've reached 80% of your burn threshold. Consider seeking shade."
-        content.sound = .default
-        
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
-        let request = UNNotificationRequest(identifier: "burnWarning", content: content, trigger: trigger)
-        UNUserNotificationCenter.current().add(request)
-    }
-    
-    private func calculateUVQualityFactor() -> Double {
-        let calendar = Calendar.current
-        let now = Date()
-        let hour = calendar.component(.hour, from: now)
-        let minute = calendar.component(.minute, from: now)
-        
-        // Convert to decimal hours
-        let timeDecimal = Double(hour) + Double(minute) / 60.0
-        
-        // Solar noon approximation (varies by location, but ~13:00 is reasonable)
-        let solarNoon = 13.0
-        
-        // Hours from solar noon
-        let hoursFromNoon = abs(timeDecimal - solarNoon)
-        
-        // UV-B effectiveness decreases from solar noon
-        // Peak quality 10 AM - 3 PM (strong UV-B window)
-        // More gradual reduction than previously modeled
-        let qualityFactor = exp(-hoursFromNoon * 0.2)
-        
-        // Ensure minimum quality during daylight hours
-        return max(0.1, min(1.0, qualityFactor))
-    }
-    
-    private func updateAdaptationFactor() {
-        healthManager?.getVitaminDHistory(days: 7) { [weak self] history in
-            guard let self = self else { return }
-            
-            // Calculate average daily exposure over past 7 days
-            let totalDays = 7.0
-            let totalVitaminD = history.values.reduce(0, +)
-            let averageDailyExposure = totalVitaminD / totalDays
-            
-            // Adaptation factor based on recent exposure
-            // Low exposure (0-1000 IU/day avg) → 0.8x
-            // Moderate exposure (5000 IU/day avg) → 1.0x  
-            // High exposure (10000+ IU/day avg) → 1.2x
-            let adaptationFactor: Double
-            if averageDailyExposure < 1000 {
-                adaptationFactor = 0.8
-            } else if averageDailyExposure >= 10000 {
-                adaptationFactor = 1.2
-            } else {
-                // Linear interpolation between 0.8 and 1.2
-                adaptationFactor = 0.8 + (averageDailyExposure - 1000) / 9000 * 0.4
-            }
-            
-            self.currentAdaptationFactor = adaptationFactor
-            
-            // Recalculate rate with new adaptation factor
-            self.updateVitaminDRate(uvIndex: self.lastUV)
-        }
-    }
-    
-    private func refreshTodaysHealthBase(force: Bool = false) {
-        let calendar = Calendar.current
-        let startOfDay = calendar.startOfDay(for: Date())
-        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
-        let now = Date()
-        if !force, let last = lastHealthBaseRefreshTime, now.timeIntervalSince(last) < healthBaseRefreshInterval {
-            return
-        }
-        healthManager?.readVitaminDIntake(from: startOfDay, to: endOfDay) { [weak self] total, _ in
-            guard let self = self else { return }
-            self.todaysHealthBase = total
-            self.lastHealthBaseRefreshTime = Date()
+        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.refresh() }
         }
     }
 
-    // Expose a public refresh for callers after Health writes
-    func refreshTodayTotals(forceWidget: Bool = false) {
-        refreshTodaysHealthBase(force: true)
-        if forceWidget { updateWidgetData(force: true) }
+    func refresh(forceWidget: Bool = false) {
+        now = Date()
+        totals = active?.totals(until: now) ?? ExposureTotals()
+        currentUV = ExposureSession.uv(at: now, in: forecast)
+        currentVitaminDRate = settings.hourlyIU(uv: currentUV ?? 0)
+        guard forceWidget || now.timeIntervalSince(lastWidgetUpdate) >= 15 * 60 else { return }
+        shared?.set(currentUV, forKey: "currentUV")
+        shared?.set(currentVitaminDRate, forKey: "vitaminDRate")
+        shared?.set(weatherUpdatedAt, forKey: "weatherUpdatedAt")
+        shared?.set(now, forKey: "totalsUpdatedAt")
+        shared?.set(isInSun, forKey: "isTracking")
+        shared?.set(active?.start, forKey: "sessionStart")
+        shared?.set(active?.id.uuidString, forKey: "sessionID")
+        shared?.set(todayTotal, forKey: "todaysTotal")
+        WidgetCenter.shared.reloadAllTimelines()
+        lastWidgetUpdate = now
     }
 
-    private func updateWidgetData() { updateWidgetData(force: false) }
-
-    private func updateWidgetData(force: Bool) {
-        guard let uvService = uvService else { return }
-        
-        // Cache latest simple values for widget
-        sharedDefaults?.set(uvService.currentUV, forKey: "currentUV")
-        sharedDefaults?.set(isInSun, forKey: "isTracking")
-        sharedDefaults?.set(currentVitaminDRate, forKey: "vitaminDRate")
-
-        // Ensure health base is reasonably fresh
-        refreshTodaysHealthBase()
-
-        // Compute today total without a Health read
-        let todaysTotal = todaysHealthBase + sessionVitaminD
-        sharedDefaults?.set(todaysTotal, forKey: "todaysTotal")
-
-        // Throttle widget timeline reloads
-        let now = Date()
-        if force || lastWidgetUpdateTime == nil || now.timeIntervalSince(lastWidgetUpdateTime!) >= widgetUpdateThrottle {
-            WidgetCenter.shared.reloadAllTimelines()
-            lastWidgetUpdateTime = now
-            #if DEBUG
-            Self.logger.debug("Widget reload (throttled): UV=\(uvService.currentUV, privacy: .public) rate=\(self.currentVitaminDRate, privacy: .public) today=\(todaysTotal, privacy: .public)")
-            #endif
-        }
-    }
-    
-    private func saveActiveSession() {
-        guard isInSun else {
-            // Clear any saved session if not tracking
-            UserDefaults.standard.removeObject(forKey: "activeSessionStartTime")
-            UserDefaults.standard.removeObject(forKey: "activeSessionVitaminD")
-            UserDefaults.standard.removeObject(forKey: "activeSessionMED")
-            UserDefaults.standard.removeObject(forKey: "activeSessionLastUV")
-            UserDefaults.standard.removeObject(forKey: "activeSessionLastUpdate")
-            return
-        }
-        
-        // Save current session state
-        UserDefaults.standard.set(sessionStartTime, forKey: "activeSessionStartTime")
-        UserDefaults.standard.set(sessionVitaminD, forKey: "activeSessionVitaminD")
-        UserDefaults.standard.set(cumulativeMEDFraction, forKey: "activeSessionMED")
-        UserDefaults.standard.set(lastUV, forKey: "activeSessionLastUV")
-        UserDefaults.standard.set(lastUpdateTime, forKey: "activeSessionLastUpdate")
-    }
-    
-    private func restoreActiveSession() {
-        // Check if there's a saved active session
-        guard let savedStartTime = UserDefaults.standard.object(forKey: "activeSessionStartTime") as? Date else {
-            return
-        }
-        
-        // Check if session is from today (don't restore old sessions)
-        let calendar = Calendar.current
-        guard calendar.isDateInToday(savedStartTime) else {
-            // Clear old session data
-            UserDefaults.standard.removeObject(forKey: "activeSessionStartTime")
-            UserDefaults.standard.removeObject(forKey: "activeSessionVitaminD")
-            UserDefaults.standard.removeObject(forKey: "activeSessionMED")
-            UserDefaults.standard.removeObject(forKey: "activeSessionLastUV")
-            UserDefaults.standard.removeObject(forKey: "activeSessionLastUpdate")
-            return
-        }
-        
-        // Restore session state
-        sessionStartTime = savedStartTime
-        sessionVitaminD = UserDefaults.standard.double(forKey: "activeSessionVitaminD")
-        cumulativeMEDFraction = UserDefaults.standard.double(forKey: "activeSessionMED")
-        lastUV = UserDefaults.standard.double(forKey: "activeSessionLastUV")
-        lastUpdateTime = UserDefaults.standard.object(forKey: "activeSessionLastUpdate") as? Date
-        
-        // Mark as tracking but don't start timer yet (wait for app to be fully initialized)
-        isInSun = true
-        wasTrackingBeforeBackground = true
+    private func syncActivity(allowStart: Bool) {
+        activity.synchronize(session: active, uv: currentUV, updatedAt: weatherUpdatedAt, allowStart: allowStart)
     }
 }
