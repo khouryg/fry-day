@@ -24,10 +24,10 @@ The Swift package runs deterministic exposure/persistence regression tests on ma
 
 ## What changed
 
-- Persistent sessions survive suspension, termination, and midnight; completed history is independent of Health permissions.
+- Persistent sessions survive suspension, termination, and midnight; completed history is independent of Health permissions. Incremental in-memory calculations preserve the original estimates while avoiding repeated processing of elapsed exposure.
 - Live Activity elapsed timer and End link; a scheduled check-in reminder works while the app is suspended.
 - Corrected end times recalculate the interval. UV forecast gaps are excluded instead of filled with invented values.
-- Timestamped weather requests, bounded cache, explicit offline state, and no moon-service dependency.
+- Timestamped weather requests, bounded cache, explicit offline state, and no moon-service dependency. Fresh forecasts are reused across launches; automatic requests run about every five minutes during an active session or ten minutes while idle, with exponential failure backoff and connectivity recovery.
 - The original widget advances UV from forecast timelines every 15 minutes; network refreshes are throttled to roughly three hours, with retry throttling and explicit forecast age.
 - No synthesized vitamin D is written into Health's dietary intake category. Optional Health access reads age and skin type only.
 - Original simple UI and time-of-day gradients retained, with Fry Day branding, a compact reminder control, and accurate save/estimate wording.

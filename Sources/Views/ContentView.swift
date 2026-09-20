@@ -5,13 +5,14 @@ struct ContentView: View {
     @EnvironmentObject var locationManager: LocationManager
     @EnvironmentObject var uvService: UVService
     @EnvironmentObject var vitaminDCalculator: VitaminDCalculator
+    @StateObject private var networkMonitor = NetworkMonitor()
     @Environment(\.scenePhase) private var scenePhase
     @State private var showClothingPicker = false
     @State private var showSunscreenPicker = false
     @State private var showSkinTypePicker = false
     @State private var showInfoSheet = false
     @State private var showManualExposureSheet = false
-    private let timer = Timer.publish(every: 60, on: .main, in: .common).autoconnect()
+    private let timer = Timer.publish(every: 60, tolerance: 5, on: .main, in: .common).autoconnect()
     private var displayedUV: Double { uvService.currentUV ?? 0 }
 
     var body: some View {
@@ -58,12 +59,18 @@ struct ContentView: View {
         .onChange(of: uvService.snapshot?.updatedAt) { _, _ in
             vitaminDCalculator.updateForecast(uvService.samples, updatedAt: uvService.lastSuccessfulUpdate)
         }
+        .onChange(of: networkMonitor.isConnected) { _, connected in
+            if connected {
+                uvService.networkBecameAvailable()
+                if scenePhase == .active { refreshWeather() }
+            }
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { locationManager.requestPermission(); refreshWeather() }
-            else if phase == .background { locationManager.stopUpdatingLocation() }
+            else { locationManager.stopUpdatingLocation() }
         }
         .onReceive(timer) { _ in
-            if scenePhase == .active { uvService.refreshCurrentUV(); refreshWeather() }
+            if scenePhase == .active { refreshWeather() }
         }
         .onOpenURL { url in
             guard url.scheme == "fryday", url.host == "end",
@@ -79,7 +86,7 @@ struct ContentView: View {
         })
     }
     private func refreshWeather(force: Bool = false) {
-        if let location = locationManager.location { uvService.fetchUVData(for: location, force: force) }
+        if let location = locationManager.location { uvService.fetchUVData(for: location, force: force, isTracking: vitaminDCalculator.isInSun) }
     }
     private var reminderRow: some View {
         HStack(spacing: 6) {

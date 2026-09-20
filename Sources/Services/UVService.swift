@@ -11,6 +11,7 @@ final class UVService: ObservableObject {
     private var request: Task<Void, Never>?
     private var requestedLocation: CLLocation?
     private var generation = UUID()
+    private var refreshPolicy = ForegroundRefreshPolicy()
     private let cacheURL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("fryday-weather.json")
 
     var samples: [UVSample] { snapshot?.samples ?? [] }
@@ -39,22 +40,33 @@ final class UVService: ObservableObject {
     }
 
     func refreshCurrentUV() {
-        currentUV = snapshot.flatMap { ExposureSession.uv(at: Date(), in: $0.samples) }
+        let value = snapshot.flatMap { ForecastRefreshPolicy.uv(at: Date(), snapshot: $0) }
+        if currentUV != value { currentUV = value }
         let shared = UserDefaults(suiteName: "group.com.khouryg.fryday")
-        shared?.set(currentCloudCover, forKey: "currentCloudCover")
-        shared?.set(currentAltitude, forKey: "currentAltitude")
-        shared?.set(moonPhaseIcon.replacingOccurrences(of: "moonphase.", with: "").replacingOccurrences(of: ".", with: " "), forKey: "moonPhaseName")
+        let phase = moonPhaseIcon.replacingOccurrences(of: "moonphase.", with: "").replacingOccurrences(of: ".", with: " ")
+        if shared?.string(forKey: "moonPhaseName") != phase { shared?.set(phase, forKey: "moonPhaseName") }
     }
 
-    func fetchUVData(for location: CLLocation, force: Bool = false) {
-        let nearby = requestedLocation.map { $0.distance(from: location) < 1000 } ?? false
-        if !force && nearby {
-            if isLoading { return }
-            if let updated = snapshot?.updatedAt, Date().timeIntervalSince(updated) < 300 {
-                refreshCurrentUV()
-                return
-            }
+    func networkBecameAvailable() {
+        // Connectivity recovery removes failure backoff; the short request-burst limit still applies.
+        refreshPolicy.succeeded()
+    }
+
+    func fetchUVData(for location: CLLocation, force: Bool = false, isTracking: Bool = false) {
+        if snapshot == nil { loadCache(near: location) }
+        let nearby = snapshot.map {
+            CLLocation(latitude: $0.latitude, longitude: $0.longitude).distance(from: location) < 1000
+        } ?? false
+        // Repeated foreground/location events share the existing request, including manual retries.
+        if isLoading, requestedLocation.map({ $0.distance(from: location) < 1000 }) == true { return }
+        let date = Date()
+        guard refreshPolicy.shouldFetch(now: date, updatedAt: snapshot?.updatedAt, nearby: nearby,
+            hasCoverage: snapshot.flatMap { ForecastRefreshPolicy.uv(at: date, snapshot: $0) } != nil,
+            isTracking: isTracking, force: force) else {
+            refreshCurrentUV()
+            return
         }
+        refreshPolicy.began(at: date)
         requestedLocation = location
         request?.cancel()
         let identifier = UUID()
@@ -71,6 +83,7 @@ final class UVService: ObservableObject {
             do {
                 let result = try await WeatherClient.fetch(latitude: location.coordinate.latitude, longitude: location.coordinate.longitude, altitude: location.verticalAccuracy >= 0 ? location.altitude : nil)
                 guard !Task.isCancelled, generation == identifier else { return }
+                refreshPolicy.succeeded()
                 snapshot = result
                 shareForecast(result)
                 refreshCurrentUV()
@@ -80,6 +93,7 @@ final class UVService: ObservableObject {
                 if let encoded = try? JSONEncoder().encode(result) { try? encoded.write(to: cacheURL, options: .atomic) }
             } catch {
                 guard !Task.isCancelled, generation == identifier else { return }
+                refreshPolicy.failed(at: Date())
                 isLoading = false
                 isOfflineMode = true
                 lastError = "Weather could not be refreshed. Cached forecasts are labeled with their update time."

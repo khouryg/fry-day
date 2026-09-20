@@ -20,7 +20,7 @@ struct ExposureSettings: Codable, Equatable {
     }
 }
 
-struct ExposureSegment: Codable {
+struct ExposureSegment: Codable, Equatable {
     var start: Date
     var settings: ExposureSettings
     var forecast: [UVSample]
@@ -35,7 +35,7 @@ struct ExposureTotals: Equatable {
     var averageUV: Double { coveredSeconds > 0 ? uvSeconds / coveredSeconds : 0 }
 }
 
-struct ExposureSession: Codable, Identifiable {
+struct ExposureSession: Codable, Identifiable, Equatable {
     var id = UUID()
     var start: Date
     var end: Date?

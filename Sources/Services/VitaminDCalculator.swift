@@ -24,6 +24,16 @@ final class VitaminDCalculator: ObservableObject {
     private let reminders = SessionReminderController()
     private let shared = UserDefaults(suiteName: "group.com.khouryg.fryday")
     private var lastWidgetUpdate = Date.distantPast
+    private var widgetUpdate: Task<Void, Never>?
+    private var timerInterval: TimeInterval?
+    private var isForeground = UIApplication.shared.applicationState == .active
+    private var activeTotals = ExposureTotalsAccumulator()
+    private var activeTodayTotals = ExposureTotalsAccumulator()
+    private var historyDirty = true
+    private var historyDay: Date?
+    private var savedTodayTotal = 0.0
+    private var historyContainsFutureEnd = false
+    @Published private(set) var todayTotal = 0.0
 
     var liveActivityStatus: String? { activity.status }
     var active: ExposureSession? { archive.active }
@@ -35,11 +45,6 @@ final class VitaminDCalculator: ObservableObject {
         guard let active else { return false }
         return (active.end ?? now).timeIntervalSince(active.start) - totals.coveredSeconds > 60
     }
-    var todayTotal: Double {
-        let start = Calendar.current.startOfDay(for: now)
-        let saved = archive.completed.reduce(0) { $0 + $1.totals(until: now, since: start).iu }
-        return saved + (active?.totals(until: now, since: start).iu ?? 0)
-    }
 
     init(store: SessionFileStore? = nil) {
         let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("FryDay", isDirectory: true)
@@ -47,15 +52,18 @@ final class VitaminDCalculator: ObservableObject {
         let savedMinutes = UserDefaults.standard.integer(forKey: "reminderMinutes")
         if [10, 20, 30, 60].contains(savedMinutes) { reminderMinutes = savedMinutes }
         reload()
-        observers.append(NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+        observers.append(NotificationCenter.default.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in
+                self?.isForeground = false
                 self?.timer?.invalidate()
                 self?.timer = nil
+                self?.timerInterval = nil
                 self?.refresh(forceWidget: true)
             }
         })
         observers.append(NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in
+                self?.isForeground = true
                 self?.refresh(forceWidget: true)
                 self?.startTimer()
                 self?.syncActivity(allowStart: false)
@@ -70,6 +78,7 @@ final class VitaminDCalculator: ObservableObject {
     func reload() {
         do {
             archive = try store.load()
+            historyDirty = true
             settings = archive.settings
             loaded = true
             errorMessage = nil
@@ -85,6 +94,7 @@ final class VitaminDCalculator: ObservableObject {
         guard loaded else { return false }
         do {
             try store.save(updated)
+            if updated.completed != archive.completed { historyDirty = true }
             archive = updated
             errorMessage = nil
             refresh(forceWidget: true)
@@ -195,18 +205,49 @@ final class VitaminDCalculator: ObservableObject {
     }
 
     private func startTimer() {
+        guard isForeground else { return }
+        let interval: TimeInterval = isInSun ? 1 : 60
+        guard timerInterval != interval || timer == nil else { return }
         timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+        timerInterval = interval
+        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
         }
+        timer?.tolerance = isInSun ? 0.1 : 5
     }
 
     func refresh(forceWidget: Bool = false) {
+        let previousNow = now
         now = Date()
-        totals = active?.totals(until: now) ?? ExposureTotals()
+        if now < previousNow { historyDirty = true }
+        totals = active.map { activeTotals.totals(for: $0, until: now) } ?? ExposureTotals()
+        let day = Calendar.current.startOfDay(for: now)
+        if historyDirty || historyDay != day || historyContainsFutureEnd {
+            savedTodayTotal = archive.completed.reduce(0) { $0 + $1.totals(until: now, since: day).iu }
+            historyContainsFutureEnd = archive.completed.contains { ($0.end ?? $0.start) > now }
+            historyDay = day
+            historyDirty = false
+        }
+        let currentToday = active.map {
+            day <= $0.start ? totals.iu : activeTodayTotals.totals(for: $0, until: now, since: day).iu
+        } ?? 0
+        let total = savedTodayTotal + currentToday
+        if todayTotal != total { todayTotal = total }
         currentUV = ExposureSession.uv(at: now, in: forecast)
         currentVitaminDRate = settings.hourlyIU(uv: currentUV ?? 0)
+        startTimer()
         guard forceWidget || now.timeIntervalSince(lastWidgetUpdate) >= 15 * 60 else { return }
+        // Collapse multiple synchronous changes (save + settings/forecast update) into one write/reload.
+        guard widgetUpdate == nil else { return }
+        widgetUpdate = Task { [weak self] in
+            await Task.yield()
+            guard let self else { return }
+            self.publishWidgetSnapshot()
+            self.widgetUpdate = nil
+        }
+    }
+
+    private func publishWidgetSnapshot() {
         shared?.set(currentUV, forKey: "currentUV")
         shared?.set(currentVitaminDRate, forKey: "vitaminDRate")
         shared?.set(weatherUpdatedAt, forKey: "weatherUpdatedAt")
