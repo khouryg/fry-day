@@ -33,6 +33,18 @@ final class VitaminDCalculator: ObservableObject {
     private var historyContainsFutureEnd = false
     @Published private(set) var todayTotal = 0.0
 
+    @Published private(set) var estimatedBurnDate: Date?
+    private var burnEstimateUpdatedAt = Date.distantPast
+
+    var estimatedBurnTimeText: String {
+        guard let date = estimatedBurnDate else { return "—" }
+        let seconds = date.timeIntervalSince(now)
+        if seconds <= 0 { return "Reached" }
+        if seconds < 60 { return "<1 min" }
+        let minutes = Int(ceil(seconds / 60))
+        return minutes < 60 ? "\(minutes) min" : "\(minutes / 60)h \(minutes % 60)m"
+    }
+
     var exposureWarningStatus: String? { exposureWarning.status }
     var liveActivityStatus: String? { activity.status }
     var active: ExposureSession? { archive.active }
@@ -219,6 +231,16 @@ final class VitaminDCalculator: ObservableObject {
         now = Date()
         if now < previousNow { historyDirty = true }
         totals = active.map { activeTotals.totals(for: $0, until: now) } ?? ExposureTotals()
+        // Reuse the warning model without repeating forecast integration every timer tick.
+        if forceWidget || now < burnEstimateUpdatedAt || now.timeIntervalSince(burnEstimateUpdatedAt) >= 60 {
+            let session = active ?? ExposureSession(start: now, reminderDate: now,
+                segments: [ExposureSegment(start: now, settings: settings, forecast: forecast)])
+            let elapsed = session.totals(until: now)
+            let complete = elapsed.coveredSeconds >= max(0, now.timeIntervalSince(session.start)) - 1
+            let canEstimate = active != nil || (ExposureSession.uv(at: now, in: forecast) ?? 0) > 0
+            estimatedBurnDate = complete && canEstimate ? session.exposureWarningDate(now: now) : nil
+            burnEstimateUpdatedAt = now
+        }
         let day = Calendar.current.startOfDay(for: now)
         if historyDirty || historyDay != day || historyContainsFutureEnd {
             savedTodayTotal = archive.completed.reduce(0) { $0 + $1.totals(until: now, since: day).iu }
