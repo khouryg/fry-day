@@ -199,6 +199,24 @@ struct ContentView: View {
             
             HStack(spacing: 15) {
                 VStack(spacing: 3) {
+                    Text("EST. BURN LIMIT")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundColor(.white.opacity(0.6))
+                    Text(vitaminDCalculator.estimatedBurnTimeText)
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundColor(.white)
+                        .monospacedDigit()
+                    Text(" ")
+                        .font(.system(size: 8, weight: .medium))
+                        .opacity(0)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Estimated time to burn")
+                .accessibilityValue(vitaminDCalculator.estimatedBurnDate == nil
+                    ? "Unavailable from current forecast" : vitaminDCalculator.estimatedBurnTimeText)
+                .accessibilityHint("Forecast-based estimate, not a guaranteed safe exposure limit")
+
+                VStack(spacing: 3) {
                     Text(uvService.shouldShowTomorrowTimes ? "MAX TMRW" : "MAX UVI")
                         .font(.system(size: 9, weight: .medium))
                         .foregroundColor(.white.opacity(0.6))

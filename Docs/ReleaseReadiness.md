@@ -1,6 +1,6 @@
 # Release readiness
 
-Release candidate 1.0.0 (4) is available to the owner in TestFlight. These checks do not guarantee App Review approval.
+Build 6 is being prepared for App Review with the restored estimated burn-limit display. Build 5 remains available in TestFlight. These checks do not guarantee App Review approval.
 
 - [x] Registered app and widget identifiers plus App Group under team `5G2JU987CA`; signed archive succeeded September 20, 2026. App and widget both verified as 1.0.0 (3).
 - [x] Installed the approved frying-pan/sun-egg icon as an opaque 1024 × 1024 asset.
@@ -34,3 +34,12 @@ See [submission copy](AppStoreSubmission.md), [TestFlight workflow](TestFlightRe
 - Three approved screenshots uploaded in home, Live Activity, history order. Draft description and review notes disclose optional Health export and its dietary-category mismatch.
 - Age questionnaire saved: calculated 16+ (regional and older OS ratings vary).
 - Physical Health export/duplicate/denied-permission and notification checks remain, along with final store declarations and public review submission.
+
+## Final preparation — September 20, 2026
+
+- Owner authorized App Review submission after the restored burn-limit display; 43 simulator tests passed and the original-height UV card was visually checked. Physical checks are not independently verified.
+- Free U.S.-only availability saved; approved screenshots and review contact saved.
+- Owner declared the app not a regulated medical device, verified in App Store Connect.
+- Privacy label published with the owner’s explicit accuracy/compliance agreement: precise location for app functionality, not linked to identity, no tracking.
+- EU trader declaration is account-wide and deferred because this release is U.S.-only.
+- Keep manual release after approval.
